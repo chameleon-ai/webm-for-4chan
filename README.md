@@ -49,14 +49,14 @@ Automatically burn-in the first available subtitles, if any exist:\
 Use external subtitles:\
 `python webm_for_4chan.py input.mkv --sub_file "input.en.ssa"`
 
-Crop the black bars out with automatic detection:
+Crop the black bars out with automatic detection:\
 `python webm_for_4chan.py input.mkv --auto_crop`
 
-By default, the script renders up to 6MB with sound.\
-Render in 4MB mode with sound:\
+By default, the script renders up to 6MiB with sound.\
+Render in 4MiB mode with sound:\
 `python webm_for_4chan.py input.mp4 --mode gif`
 
-Render in 4MB mode with no sound:\
+Render in 4MiB mode with no sound:\
 `python webm_for_4chan.py input.mp4 --mode other`
 
 Type `--help` for list of complete commands.

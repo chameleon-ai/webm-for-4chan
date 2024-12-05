@@ -269,7 +269,7 @@ def cropdetect(input, start, duration):
         return None
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, subtitles, track, mode, dry_run):
+def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, deblock, deflicker, decimate, subtitles, track, mode, dry_run):
     ffmpeg_args = ["ffmpeg"]
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
@@ -286,9 +286,21 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
         print(fps)
         if vf_args != '':
             vf_args += ',' # Tack on to other args if string isn't empty
-        vf_args += 'fps={}'.format(fps) # Video filter arguments
+        vf_args += 'fps={}'.format(fps)
     else:
         print('same as source')
+    if deblock:
+        if vf_args != '':
+            vf_args += ',' # Tack on to other args if string isn't empty
+        vf_args += 'deblock'
+    if deflicker:
+        if vf_args != '':
+            vf_args += ','
+        vf_args += 'deflicker'
+    if decimate:
+        if vf_args != '':
+            vf_args += ','
+        vf_args += 'decimate'
     if subtitles != '':
         # The order of arguments apparently matters when it comes to the subtitles, with -i needing to come first if there are subs
         print("Subtitle burn-in enabled.")
@@ -461,7 +473,7 @@ def process_video(input, output, start, duration, args):
     else:
         print(resolution)
     # The main part where the video is rendered
-    encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, subs, audio_track, args.mode, args.dry_run)
+    encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, args.deblock, args.deflicker, args.decimate, subs, audio_track, args.mode, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -497,6 +509,9 @@ if __name__ == '__main__':
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--no_normalize', action='store_true', help='Disable 2-pass audio normalization. Use if you have errors with normalization step 1.')
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
+        parser.add_argument('--deblock', action='store_true', help='Apply deblock filter (see ffmpeg documentation)')
+        parser.add_argument('--deflicker', action='store_true', help='Apply deflicker filter (see ffmpeg documentation)')
+        parser.add_argument('--decimate', action='store_true', help='Apply decimate filter (see ffmpeg documentation)')
         parser.add_argument('--crunchy', action='store_true', help="Make it crunchy (fast test encode when --dry_run isn't enough)")
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         args, unknown_args = parser.parse_known_args()
