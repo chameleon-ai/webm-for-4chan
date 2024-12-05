@@ -26,7 +26,8 @@ Make sure ffmpeg and ffprobe are accessible from your path, that's it.
 If the video is already clipped and ready to be converted, simply:\
 `python webm_for_4chan.py input.mp4`
 
-The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm`
+The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.
+Use `--output` to specify a custom file name.
 
 Clipping the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
 `python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`
@@ -49,15 +50,11 @@ Automatically burn-in the first available subtitles, if any exist:\
 Use external subtitles:\
 `python webm_for_4chan.py input.mkv --sub_file "input.en.ssa"`
 
-Crop the black bars out with automatic detection:\
-`python webm_for_4chan.py input.mkv --auto_crop`
+Use `--auto_crop` to crop black bars out with automatic detection.
 
 By default, the script renders up to 6MiB with sound.\
-Render in 4MiB mode with sound:\
-`python webm_for_4chan.py input.mp4 --mode gif`
-
-Render in 4MiB mode with no sound:\
-`python webm_for_4chan.py input.mp4 --mode other`
+To render up to 4MiB with sound, use `--mode gif`\
+To render up to 4MiB with no sound, use `--mode other`
 
 Type `--help` for list of complete commands.
 
@@ -70,7 +67,6 @@ Type `--help` for list of complete commands.
 - The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.
 - You may notice some droppings in your current working directory like temp.opus and temp.normalized.opus. These are the intermediate audio files used for size calculation purposes. They're not removed automatically because they're currently useful to me for debugging purposes.
 - Subtitle burn-in is mostly tested with ASS subs. If external subs are in a format that ffmpeg doesn't recognize, you'll have to convert them manually.
-- Even if you manually specify an output file name, it will be prepended with `_1_` and appended with `.webm`, which can lead to weird file names like "_1_output.webm.webm". I'll have to overhaul the output file name logic at some point, just be aware of this known issue.
 
 ## Testers Wanted!
 I tested this as well as I can, but I don't know how well it works for others. Some anons have tested pre-release versions of this script but any extra feedback is welcome.

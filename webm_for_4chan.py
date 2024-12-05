@@ -21,7 +21,7 @@ resolution_map = { # Map of clip duration to resolution. Clip must be below the 
     15.0: 1920,
     30.0: 1600,
     45.0: 1440,
-    120.0: 1280,
+    90.0: 1280,
     145.0: 1024,
     190.0: 720,
     270.0: 640,
@@ -267,6 +267,37 @@ def cropdetect(input, start, duration):
         return crop_output[-1]
     else:
         return None
+    
+# Convoluted method of determining the output file name. Avoid overwriting existing files, etc.
+def get_output_filename(input_filename, args):
+    # Use manually specified output
+    if args.output is not None:
+        output = args.output
+        # Force webm suffix
+        if os.path.splitext(output)[-1] != '.webm':
+            output += '.webm'
+        if os.path.isfile(output):
+            confirmation = ''
+            while not (confirmation.lower() == 'y' or confirmation.lower() == 'n'):
+                confirmation = input("File '{}' already exists, overwrite? Y/N ".format(output))
+            if confirmation.lower() == 'y':
+                os.remove(output) # Remove existing file
+            else:
+                print('Halting.')
+                exit(0)
+        return output
+    # Automatically determine file name based on input file
+    else:
+        output = os.path.splitext(input_filename)[0]
+        filename_count = 1
+        while True:
+            # Rename the output by prepending '_1_' to the start of the file name.
+            # The dirname shenanigans are an attempt to differentiate a file in a subdirectory vs a filename unqualified in the current directory.
+            final_output = os.path.dirname(output) + (os.path.sep if os.path.dirname(output) != "" else "") + '_{}_'.format(filename_count) + os.path.basename(output) + '.webm'
+            if os.path.isfile(final_output):
+                filename_count += 1 # Try to deconflict the file name by finding a different file name
+            else:
+                return final_output
 
 # The part where the webm is encoded
 def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, deblock, deflicker, decimate, subtitles, track, mode, dry_run):
@@ -370,12 +401,8 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
         if pope.returncode != 0:
             raise RuntimeError('ffmpeg returned code {}'.format(pope.returncode))
 
-def process_video(input, output, start, duration, args):
-    # Rename the output by prepending '_1_' to the start of the file name.
-    # The dirname shenanigans are an attempt to differentiate a file in a subdirectory vs a filename unqualified in the current directory.
-    output = os.path.dirname(output) + (os.path.sep if os.path.dirname(output) != "" else "") + '_1_' + os.path.basename(output) + '.webm'
-    if os.path.isfile(output):
-        os.remove(output) # Get rid of the output if it already exists
+def process_video(input, start, duration, args):
+    output = get_output_filename(input, args)
     
     audio_track = None
     if args.audio_index is not None:
@@ -517,26 +544,26 @@ if __name__ == '__main__':
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()
-        input = None
+        input_filename = None
         if args.input is not None: # Input was explicitly specified
-            input = args.input
+            input_filename = args.input
         elif len(unknown_args) > 0: # Input was specified as an unknown argument
-            input = unknown_args[-1]
+            input_filename = unknown_args[-1]
         else:
             parser.print_help() # Can't identify the input file
             exit(0)
-        if input is None:
+        if input_filename is None:
             parser.print_help()
             exit(0)
-        if os.path.isfile(input):
+        if os.path.isfile(input_filename):
             # List available subtitles and quit
             if args.list_subs:
-                subs = list_subtitles(input)
+                subs = list_subtitles(input_filename)
                 for idx, lang in subs.items():
                     print('{},{}'.format(idx, lang))
                 exit(0)
             if args.list_audio:
-                tracks = list_audio(input)
+                tracks = list_audio(input_filename)
                 for idx, lang in tracks.items():
                     print('{},{}'.format(idx, lang))
                 exit(0)
@@ -555,16 +582,15 @@ if __name__ == '__main__':
                 duration = end - start_time
             # If neither was specified, use the video itself
             else:
-                duration = get_video_duration(input)
+                duration = get_video_duration(input_filename)
             print('duration:', duration)
             duration_sec = duration.total_seconds()
             if duration_sec > max_duration:
                 raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, max_duration))
-            output = args.output if args.output is not None else os.path.splitext(input)[0]
-            result = process_video(input, output, start_time, duration, args)
+            result = process_video(input_filename, start_time, duration, args)
             print('output file: "{}"'.format(result))
         else:
-            print('Input file not found: "' + input + '"')
+            print('Input file not found: "' + input_filename + '"')
     except argparse.ArgumentError as e:
         print(e)
     except ValueError as e:
