@@ -38,6 +38,9 @@ Or specify a relative 2 minute duration:\
 Start time is 0:00 by default, so you can render the first minute of the clip like this:\
 `python webm_for_4chan.py input.mp4 -d 1:00`
 
+End time is also calculated if not specified, so to render from the 5:30 mark until the end of the video:\
+`python webm_for_4chan.py input.mp4 -s 5:30`
+
 Render a 30 second anime clip with dual audio, select japanese audio and burn in english soft-subs:\
 `python webm_for_4chan.py input.mkv --sub_lang eng --audio_lang jpn -s 12:00 -d 30`
 
