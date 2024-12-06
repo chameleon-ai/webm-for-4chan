@@ -16,12 +16,12 @@ import time
 import traceback
 
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes
-max_duration = [400, 120] # Maximum clip duration, in seconds, for wsg, and all other boards
+max_duration = [400, 120] # Maximum clip durations, in seconds
 resolution_map = { # Map of clip duration to resolution. Clip must be below the specified duration to fit into the resolution
     15.0: 1920,
     30.0: 1600,
     45.0: 1440,
-    90.0: 1280,
+    75.0: 1280,
     145.0: 1024,
     190.0: 720,
     270.0: 640,
@@ -42,7 +42,8 @@ fps_map = { # Map of clip duration to fps. Clip must be below the duration to fi
     400.0: 24.0
 }
 audio_map = { # Map of clip duration to audio bitrate. Very long clips benefit from audio bitrate reduction, but not ideal for music oriented webms. Use --music_mode to bypass.
-    120.0: 96,
+    90.0: 96,
+    120.0: 80,
     240.0: 64,
     300.0: 56,
     360.0: 48,
