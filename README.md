@@ -50,7 +50,7 @@ Automatically burn-in the first available subtitles, if any exist:\
 Use external subtitles:\
 `python webm_for_4chan.py input.mkv --sub_file "input.en.ssa"`
 
-Use `--auto_crop` to crop black bars out with automatic detection.
+Use `--auto_crop` to crop using automatic edge detection.
 
 By default, the script renders up to 6MiB with sound.\
 To render up to 4MiB with sound, use `--mode gif`\

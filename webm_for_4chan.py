@@ -393,9 +393,9 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
     print(' '.join(pass2))
     if not dry_run:
         # Use popen so we can pend on completion
-        pope = subprocess.Popen(pass2, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        for line in iter(pope.stderr):
-            print(line.decode(), end='')
+        pope = subprocess.Popen(pass2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        for line in iter(pope.stderr.readline, ""):
+            print(line, end='')
         pope.stderr.close()
         pope.wait()
         if pope.returncode != 0:
