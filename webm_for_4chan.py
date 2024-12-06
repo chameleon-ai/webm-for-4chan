@@ -63,11 +63,11 @@ bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This val
 null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1 and certain preprocessing steps, need to output to appropriate null depending on system
 
 # This is only called if you don't specify a duration or end time. Uses ffprobe to find out how long the input is.
-def get_video_duration(input_filename):
+def get_video_duration(input_filename, start_time : float):
     # https://superuser.com/questions/650291/how-to-get-video-duration-in-seconds
     result = subprocess.run(["ffprobe","-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_filename], stdout=subprocess.PIPE, text=True)
     duration_seconds = float(result.stdout)
-    return datetime.timedelta(seconds=duration_seconds)
+    return datetime.timedelta(seconds=duration_seconds - start_time)
 
 # Rudamentary timestamp parsing, the format is H:M:S.ms and hours/minutes/milliseconds can be omitted
 def parsetime(ts_input):
@@ -603,8 +603,9 @@ if __name__ == '__main__':
                 duration = end - start_time
             # If neither was specified, use the video itself
             else:
-                duration = get_video_duration(input_filename)
-                full_video = True
+                duration = get_video_duration(input_filename, start_time.total_seconds())
+                if start_time.total_seconds() == 0:
+                    full_video = True
             print('duration:', duration)
             duration_sec = duration.total_seconds()
             duration_limit = max_duration[0] if str(args.mode) == 'wsg' else max_duration[1]
