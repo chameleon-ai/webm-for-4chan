@@ -318,7 +318,7 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, deblock, deflicker, decimate, subtitles, track, mode, dry_run):
+def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, deblock : bool, deflicker : bool, decimate : bool, subtitles, track, full_video : bool, mode : ConvertMode, dry_run : bool):
     ffmpeg_args = ["ffmpeg"]
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
@@ -357,12 +357,14 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
             vf_args += ',' # Tack on to other args if string isn't empty
         vf_args += "subtitles={}".format(subtitles)
         ffmpeg_args.extend(['-i', input])
-        ffmpeg_args.extend(slice_args)
+        if not full_video:
+            ffmpeg_args.extend(slice_args)
     else:
         # Experimentally, it is faster to run -i after -ss and -t if there are no subtitles.
         # Is it placebo? I don't know, but I do know that -i needs to be first for subs to work,
         # and this is the order I used before adding the subtitle feature.
-        ffmpeg_args.extend(slice_args)
+        if not full_video:
+            ffmpeg_args.extend(slice_args)
         ffmpeg_args.extend(['-i', input])
 
     if vf_args != '': # Add video filter if there are any arguments
@@ -419,7 +421,7 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
         if pope.returncode != 0:
             raise RuntimeError('ffmpeg returned code {}'.format(pope.returncode))
 
-def process_video(input_filename, start, duration, args):
+def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
     
     audio_track = None
@@ -518,7 +520,7 @@ def process_video(input_filename, start, duration, args):
     else:
         print(resolution)
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, args.deblock, args.deflicker, args.decimate, subs, audio_track, args.mode, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, args.deblock, args.deflicker, args.decimate, subs, audio_track, full_video, args.mode, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -589,6 +591,7 @@ if __name__ == '__main__':
             print('start time:', start_time)
             # Attempt to find the duration of the clip
             duration = datetime.timedelta(milliseconds=0)
+            full_video = False # Special flag for encoding the full video, which will skip -ss
             # Prefer a direct duration if specified
             if args.duration is not None:
                 duration = parsetime(args.duration)
@@ -601,12 +604,13 @@ if __name__ == '__main__':
             # If neither was specified, use the video itself
             else:
                 duration = get_video_duration(input_filename)
+                full_video = True
             print('duration:', duration)
             duration_sec = duration.total_seconds()
             duration_limit = max_duration[0] if str(args.mode) == 'wsg' else max_duration[1]
             if duration_sec > duration_limit:
                 raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
-            result = process_video(input_filename, start_time, duration, args)
+            result = process_video(input_filename, start_time, duration, args, full_video)
             print('output file: "{}"'.format(result))
         else:
             print('Input file not found: "' + input_filename + '"')
