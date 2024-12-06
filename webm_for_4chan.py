@@ -47,15 +47,15 @@ bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This val
 null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1 and certain preprocessing steps, need to output to appropriate null depending on system
 
 # This is only called if you don't specify a duration or end time. Uses ffprobe to find out how long the input is.
-def get_video_duration(input):
+def get_video_duration(input_filename):
     # https://superuser.com/questions/650291/how-to-get-video-duration-in-seconds
-    result = subprocess.run(["ffprobe","-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input], stdout=subprocess.PIPE, text=True)
+    result = subprocess.run(["ffprobe","-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_filename], stdout=subprocess.PIPE, text=True)
     duration_seconds = float(result.stdout)
     return datetime.timedelta(seconds=duration_seconds)
 
 # Rudamentary timestamp parsing, the format is H:M:S.ms and hours/minutes/milliseconds can be omitted
-def parsetime(input):
-    ts = input.split('.')
+def parsetime(ts_input):
+    ts = ts_input.split('.')
     # Note: I didn't want to import a 3rd party library just to parse simple timestamps. The janky millisecond parsing is a result of this.
     ms = 0
     if len(ts) > 1:
@@ -84,11 +84,11 @@ class ConvertMode(Enum):
         return self.value
 
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
-def calculate_target_resolution(duration):
+def calculate_target_resolution(duration, input_filename):
     native_res = None
     try:
         # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
-        result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input], stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
         if result.returncode == 0:
             # Grab the largest dimension of the video's resolution
             native_res = max([int(x) for x in result.stdout.strip().split(',')])
@@ -107,7 +107,7 @@ def calculate_target_resolution(duration):
     return calculated_res
 
 # Same idea as the resolution lookup table but for fps. Also takes into account the source fps.
-def calculate_target_fps(input, duration):
+def calculate_target_fps(input_filename, duration):
     frame_rate = 60
     # Get frame rate limit according to the map
     for key in sorted(fps_map):
@@ -115,7 +115,7 @@ def calculate_target_fps(input, duration):
             frame_rate = fps_map[key]
             break
     # Get input frame rate
-    result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", input], stdout=subprocess.PIPE, text=True)
+    result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", input_filename], stdout=subprocess.PIPE, text=True)
     # Outputs the frame rate as a precise fraction. Have to convert to decimal.
     source_fps_fractional = result.stdout.split('/')
     source_fps = round(float(source_fps_fractional[0]) / float(source_fps_fractional[1]), 2)
@@ -155,12 +155,12 @@ def find_json(output):
 # Simply renders the audio to file and gets its size.
 # This is the most precise way of knowing the final audio size and rendering this takes a fraction of the time it takes to render the video.
 # Returns a tuple containing the audio bit rate and normalization parameters if applicable
-def calculate_audio_size(input, start, duration, audio_bitrate, track, mode, normalize):
+def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode, normalize):
     if str(mode) == 'wsg' or str(mode) == 'gif':
         output = 'temp.opus'
         if os.path.isfile(output):
             os.remove(output)
-        ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input, '-vn', '-acodec', 'libopus', '-b:a', audio_bitrate]
+        ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', 'libopus', '-b:a', audio_bitrate]
         if track is not None: # Optional audio track selection
             ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
         ffmpeg_cmd.append(output)
@@ -183,7 +183,7 @@ def calculate_audio_size(input, start, duration, audio_bitrate, track, mode, nor
                 if os.path.isfile(output2):
                     os.remove(output2)
                 # The size of the normalized audio is different from the initial one, so render to get the exact size
-                ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input, '-vn', '-acodec', 'libopus', '-filter:a', 'loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}'.format(params['input_i'], params['input_lra'], params['input_tp'], params['input_thresh']), '-b:a', audio_bitrate]
+                ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', 'libopus', '-filter:a', 'loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}'.format(params['input_i'], params['input_lra'], params['input_tp'], params['input_thresh']), '-b:a', audio_bitrate]
                 if track is not None: # Optional audio track selection
                     ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
                 ffmpeg_cmd.append(output2)
@@ -217,9 +217,9 @@ def calculate_bitrate_compensation(duration, manual_compensation):
     return 0 + manual_compensation
 
 # Return a dictionary of the available subtitles, with index as the key and language as the value
-def list_subtitles(input):
+def list_subtitles(input_filename):
     # ffprobe -loglevel error -select_streams s -show_entries stream=index:stream_tags=language -of csv=p=0
-    result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "s", "-of", "csv=p=0", "-show_entries", "stream=index:stream_tags=language", input], stdout=subprocess.PIPE, text=True)
+    result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "s", "-of", "csv=p=0", "-show_entries", "stream=index:stream_tags=language", input_filename], stdout=subprocess.PIPE, text=True)
     if result.returncode == 0:
         lines = result.stdout.splitlines()
         subs = dict()
@@ -234,9 +234,9 @@ def list_subtitles(input):
         raise RuntimeError('ffprobe returned code {}'.format(result.returncode))
 
 # Return a dictionary of the available audio tracks, with index as the key and language as the value
-def list_audio(input):
+def list_audio(input_filename):
     # ffprobe -show_entries stream=index:stream_tags=language -select_streams a -of compact=p=0:nk=1
-    result = subprocess.run(["ffprobe","-v", "error", "-show_entries", "stream=index:stream_tags=language", "-select_streams", "a", "-of", "csv=p=0", input], stdout=subprocess.PIPE, text=True)
+    result = subprocess.run(["ffprobe","-v", "error", "-show_entries", "stream=index:stream_tags=language", "-select_streams", "a", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
     if result.returncode == 0:
         lines = result.stdout.splitlines()
         tracks = dict()
@@ -250,9 +250,9 @@ def list_audio(input):
         print(result.stdout)
         raise RuntimeError('ffprobe returned code {}'.format(result.returncode))
 
-def cropdetect(input, start, duration):
+def cropdetect(input_filename, start, duration):
     print('Running cropdetect')
-    result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input, '-vf', 'cropdetect', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vf', 'cropdetect', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(result.stderr.decode())
         raise RuntimeError('ffmpeg returned code {}'.format(result.returncode))
@@ -401,19 +401,19 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
         if pope.returncode != 0:
             raise RuntimeError('ffmpeg returned code {}'.format(pope.returncode))
 
-def process_video(input, start, duration, args):
-    output = get_output_filename(input, args)
+def process_video(input_filename, start, duration, args):
+    output = get_output_filename(input_filename, args)
     
     audio_track = None
     if args.audio_index is not None:
-        track_list = list_audio(input)
+        track_list = list_audio(input_filename)
         if args.audio_index in track_list.keys():
             print('Selected audio track: {}'.format(args.audio_index))
             audio_track = args.audio_index
         else:
             print('Warning: Audio track {} not found, using default audio track.'.format(args.audio_index))
     elif args.audio_lang is not None:
-        track_list = list_audio(input)
+        track_list = list_audio(input_filename)
         for key, value in track_list.items():
             if value == args.audio_lang:
                 audio_track = key
@@ -430,7 +430,7 @@ def process_video(input, start, duration, args):
     audio_bitrate = '{}k'.format(audio_kbps)
     print(audio_bitrate)
     # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
-    audio_size, np = calculate_audio_size(input, start, duration, audio_bitrate, audio_track, args.mode, False if args.music_mode else not args.no_normalize)
+    audio_size, np = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, False if args.music_mode else not args.no_normalize)
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
     target_kbps = min((int)(size_kb / duration.total_seconds()), max_kbps) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
@@ -449,7 +449,7 @@ def process_video(input, start, duration, args):
         sub_idx = None
         # Use the first sub index, if any exist
         if args.auto_subs:
-            sub_list = list_subtitles(input)
+            sub_list = list_subtitles(input_filename)
             for key in sub_list.keys():
                 print('Auto sub: {},{}'.format(key,sub_list[key]))
                 sub_idx = key
@@ -457,13 +457,13 @@ def process_video(input, start, duration, args):
             if sub_idx is None:
                 print('Auto sub: No subtitles detected.')
         elif args.sub_index is not None:
-            sub_list = list_subtitles(input)
+            sub_list = list_subtitles(input_filename)
             if args.sub_index in sub_list.keys():
                 sub_idx = args.sub_index
             else:
                 print("Warning: Subtitle index {} not found, skipping subtitle burn-in. Use --list_subs for info on this file.".format(args.sub_index))
         elif args.sub_lang is not None:
-            sub_list = list_subtitles(input)
+            sub_list = list_subtitles(input_filename)
             for key, value in sub_list.items():
                 if value == args.sub_lang:
                     sub_idx = key
@@ -476,7 +476,7 @@ def process_video(input, start, duration, args):
             output_subs = 'temp.ass'
             if os.path.exists(output_subs):
                 os.remove(output_subs)
-            result = subprocess.run(['ffmpeg', '-i', input, '-map', '0:s:{}'.format(sub_idx), output_subs], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run(['ffmpeg', '-i', input_filename, '-map', '0:s:{}'.format(sub_idx), output_subs], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if result.returncode != 0:
                 print(result.stderr)
                 raise RuntimeError("Error rendering subtitles. ffmpeg returned {}".format(result.returncode))
@@ -484,7 +484,7 @@ def process_video(input, start, duration, args):
     
     crop = None
     if args.auto_crop:
-        crop = cropdetect(input, start, duration)
+        crop = cropdetect(input_filename, start, duration)
     elif args.crop:
         crop = 'crop={}'.format(args.crop)
 
@@ -494,13 +494,13 @@ def process_video(input, start, duration, args):
         if args.resolution is not None: # Manual resolution override
             resolution = args.resolution
         else: # Use resolution lookup map
-            resolution = calculate_target_resolution(duration) # Look up the appropriate resolution cap in the table
+            resolution = calculate_target_resolution(duration, input_filename) # Look up the appropriate resolution cap in the table
     if resolution is None:
         print('same as source')
     else:
         print(resolution)
     # The main part where the video is rendered
-    encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, args.deblock, args.deflicker, args.decimate, subs, audio_track, args.mode, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, args.deblock, args.deflicker, args.decimate, subs, audio_track, args.mode, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
