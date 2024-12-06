@@ -16,7 +16,7 @@ import time
 import traceback
 
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes
-max_duration = 400 # Maximum clip duration, in seconds
+max_duration = [400, 120] # Maximum clip duration, in seconds, for wsg, and all other boards
 resolution_map = { # Map of clip duration to resolution. Clip must be below the specified duration to fit into the resolution
     15.0: 1920,
     30.0: 1600,
@@ -27,6 +27,14 @@ resolution_map = { # Map of clip duration to resolution. Clip must be below the 
     270.0: 640,
     330.0: 576,
     400.0: 480
+}
+resolution_map_gif = { # Separate resolution lookup for gif mode (4MB w/ sound)
+    15.0: 1600,
+    30.0: 1280,
+    45.0: 1024,
+    75.0: 720,
+    90.0: 640,
+    120.0: 576
 }
 fps_map = { # Map of clip duration to fps. Clip must be below the duration to fit into the fps cap
     150.0: 60.0,
@@ -39,6 +47,13 @@ audio_map = { # Map of clip duration to audio bitrate. Very long clips benefit f
     300.0: 56,
     360.0: 48,
     400.0: 32
+}
+audio_map_gif = { # Separate audio lookup for gif mode (4MB w/ sound)
+    10.0: 96,
+    20.0: 64,
+    40.0: 56,
+    60.0: 48,
+    120.0: 32
 }
 bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This value is subtracted to prevent file size overshoot, which tends to happen in longer files
     300.0: 0,
@@ -84,7 +99,7 @@ class ConvertMode(Enum):
         return self.value
 
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
-def calculate_target_resolution(duration, input_filename):
+def calculate_target_resolution(duration, input_filename, mode : ConvertMode):
     native_res = None
     try:
         # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
@@ -98,9 +113,10 @@ def calculate_target_resolution(duration, input_filename):
     except Exception as e:
         print('Error getting input resolution. Using no input resolution assumptions')
     calculated_res = 1920
-    for key in sorted(resolution_map):
+    resmap = resolution_map_gif if str(mode) == 'gif' else resolution_map
+    for key in sorted(resmap):
         if duration.total_seconds() <= key:
-            calculated_res = resolution_map[key]
+            calculated_res = resmap[key]
             break
     if native_res is not None and native_res <= calculated_res:
         return None # Return None to signal that the video should not be resized
@@ -125,12 +141,13 @@ def calculate_target_fps(input_filename, duration):
     return frame_rate # Return calculated fps otherwise
 
 # Use audio lookup table
-def calculate_target_audio_rate(duration, music_mode):
+def calculate_target_audio_rate(duration, music_mode, mode : ConvertMode):
     if music_mode:
         return 128 # Use high bit rate in music mode
-    for key in sorted(audio_map):
+    audiomap = audio_map_gif if str(mode) == 'gif' else audio_map
+    for key in sorted(audiomap):
         if duration.total_seconds() <= key:
-            return audio_map[key]
+            return audiomap[key]
     return 96
 
 def find_json(output):
@@ -426,7 +443,7 @@ def process_video(input_filename, start, duration, args):
     max_kbps = 2800 # Cap bitrate in case the clip is really short. This is already an absurdly high rate.
     size_limit = max_size[0] if str(args.mode) == 'wsg' else max_size[1] # Look up the size cap depending on the board it's destined for
     print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
-    audio_kbps = calculate_target_audio_rate(duration, args.music_mode)
+    audio_kbps = calculate_target_audio_rate(duration, args.music_mode, args.mode)
     audio_bitrate = '{}k'.format(audio_kbps)
     print(audio_bitrate)
     # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
@@ -494,7 +511,7 @@ def process_video(input_filename, start, duration, args):
         if args.resolution is not None: # Manual resolution override
             resolution = args.resolution
         else: # Use resolution lookup map
-            resolution = calculate_target_resolution(duration, input_filename) # Look up the appropriate resolution cap in the table
+            resolution = calculate_target_resolution(duration, input_filename, args.mode) # Look up the appropriate resolution cap in the table
     if resolution is None:
         print('same as source')
     else:
@@ -520,7 +537,7 @@ if __name__ == '__main__':
         parser.add_argument('-o', '--output', type=str, help='Output File name (default output is named after the input prepended with "_1_")')
         parser.add_argument('-s', '--start', type=str, default='0.0', help='Start timestamp, i.e. 0:30:5.125')
         parser.add_argument('-e', '--end', type=str, help='End timestamp, i.e. 0:35:0.000')
-        parser.add_argument('-d', '--duration', type=str, help='Clip duration (maximum {} seconds), i.e. 1:15.000'.format(max_duration))
+        parser.add_argument('-d', '--duration', type=str, help='Clip duration (maximum {} seconds in wsg mode and {} seconds otherwise), i.e. 1:15.000'.format(max_duration[0], max_duration[1]))
         parser.add_argument('-b', '--bitrate_compensation', default=0, type=int, help='Fixed value to subtract from target bitrate (kbps). Use if your output size is overshooting')
         parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")
         parser.add_argument('-c', '--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
@@ -585,8 +602,9 @@ if __name__ == '__main__':
                 duration = get_video_duration(input_filename)
             print('duration:', duration)
             duration_sec = duration.total_seconds()
-            if duration_sec > max_duration:
-                raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, max_duration))
+            duration_limit = max_duration[0] if str(args.mode) == 'wsg' else max_duration[1]
+            if duration_sec > duration_limit:
+                raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
             result = process_video(input_filename, start_time, duration, args)
             print('output file: "{}"'.format(result))
         else:
