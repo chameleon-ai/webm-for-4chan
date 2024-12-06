@@ -448,7 +448,7 @@ def process_video(input_filename, start, duration, args):
     audio_bitrate = '{}k'.format(audio_kbps)
     print(audio_bitrate)
     # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
-    audio_size, np = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, False if args.music_mode else not args.no_normalize)
+    audio_size, np = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, args.normalize)
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
     target_kbps = min((int)(size_kb / duration.total_seconds()), max_kbps) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
@@ -542,8 +542,9 @@ if __name__ == '__main__':
         parser.add_argument('-b', '--bitrate_compensation', default=0, type=int, help='Fixed value to subtract from target bitrate (kbps). Use if your output size is overshooting')
         parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")
         parser.add_argument('-c', '--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
+        parser.add_argument('-n', '--normalize', action='store_true', help='Enable 2-pass audio normalization.')
         parser.add_argument('--auto_crop', action='store_true', help="Automatic crop using cropdetect.")
-        parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality. Also disables audio normalization.")
+        parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")
         parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
         parser.add_argument('--auto_subs', action='store_true', help="Automatically burn-in the first embedded subtitles, if they exist")
         parser.add_argument('--sub_index', type=int, help="Subtitle index to burn-in (use --list_subs if you don't know the index)")
@@ -552,7 +553,6 @@ if __name__ == '__main__':
         parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
-        parser.add_argument('--no_normalize', action='store_true', help='Disable 2-pass audio normalization. Use if you have errors with normalization step 1.')
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
         parser.add_argument('--deblock', action='store_true', help='Apply deblock filter (see ffmpeg documentation)')
         parser.add_argument('--deflicker', action='store_true', help='Apply deflicker filter (see ffmpeg documentation)')
