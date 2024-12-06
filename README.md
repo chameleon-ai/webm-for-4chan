@@ -51,14 +51,14 @@ To render up to 4MiB with no sound, use `--mode other`
 Enable audio volume normalization with `--normalize`\
 Crop using automatic edge detection with `--auto_crop`\
 Automatically burn-in the first available subtitles, if any exist, with `--auto_subs`\
-Print available subtitles with  `--list_subs`
-Print available audio tracks with  `--list_audio`
+Print available subtitles with  `--list_subs`\
+Print available audio tracks with  `--list_audio`\
 Also supports a handful of other ffmpeg video filters with `--deblock`, `--deflicker`, and `--decimate`
 
 Type `--help` for list of complete commands.
 
 ## Extra Notes and Quirks
-- Audio bitrate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`.
+- Audio bitrate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
 - It's tough to do one-size-fits-all automatic resolution scaling. Currently it is tuned to produce large resolutions, which can cause artifacts if the source has high motion or a lot of colors. If the output is a little too crunchy, I recommend specifying `--resolution` at one notch lower than what it automatically selected (you can find the resolution map at the top of the script)
 - If you don't want to resize it at all, use `--no_resize`
@@ -68,6 +68,7 @@ Type `--help` for list of complete commands.
 - The file 'temp.ass' is generated if burning in soft subs. I tried using the subs directly from the video, but this didn't work well when making clips, so I had to resort to exporting to a separate file.
 - Subtitle burn-in is mostly tested with ASS subs. If external subs are in a format that ffmpeg doesn't recognize, you'll have to convert them manually.
 - Audio will always be re-encoded even if the source is opus. Trust me, I tried to make ffmpeg's copy option work, but it didn't work well when making clips.
+- You may notice that rendering is significantly slower when burning in subtitles. I tried many different settings and ffmpeg is very fragile, this is the only method I could figure out that works consistently.
 
 ## Testers Wanted!
 I tested this as well as I can, but I don't know how well it works for others. Some anons have tested pre-release versions of this script but any extra feedback is welcome.
