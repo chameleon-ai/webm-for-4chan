@@ -50,12 +50,13 @@ To render up to 4MiB with no sound, use `--mode other`
 
 Enable audio volume normalization with `--normalize`\
 Crop using automatic edge detection with `--auto_crop`\
+Crop using manually specified boundaries with `--crop`\
 Automatically burn-in the first available subtitles, if any exist, with `--auto_subs`\
 Print available subtitles with  `--list_subs`\
 Print available audio tracks with  `--list_audio`\
 Also supports a handful of other ffmpeg video filters with `--deblock`, `--deflicker`, and `--decimate`
 
-Type `--help` for list of complete commands.
+Type `--help` for a complete list of commands.
 
 ## Extra Notes and Quirks
 - Audio bitrate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`
@@ -67,7 +68,7 @@ Type `--help` for list of complete commands.
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
 - The file 'temp.ass' is generated if burning in soft subs. I tried using the subs directly from the video, but this didn't work well when making clips, so I had to resort to exporting to a separate file.
 - Subtitle burn-in is mostly tested with ASS subs. If external subs are in a format that ffmpeg doesn't recognize, you'll have to convert them manually.
-- Audio will always be re-encoded even if the source is opus. Trust me, I tried to make ffmpeg's copy option work, but it didn't work well when making clips.
+- Audio will always be re-encoded even if the source is opus. I tried to make ffmpeg's copy option work, but it didn't work well when making clips.
 - You may notice that rendering is significantly slower when burning in subtitles. I tried many different settings and ffmpeg is very fragile, this is the only method I could figure out that works consistently.
 
 ## Testers Wanted!
