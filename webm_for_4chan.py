@@ -133,6 +133,9 @@ def calculate_target_fps(input_filename, duration):
             break
     # Get input frame rate
     result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", input_filename], stdout=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        print(result.stdout)
+        raise RuntimeError('Error reading stream fps, ffprobe returned error code {}'.format(result.returncode))
     # Outputs the frame rate as a precise fraction. Have to convert to decimal.
     source_fps_fractional = result.stdout.split('/')
     source_fps = round(float(source_fps_fractional[0]) / float(source_fps_fractional[1]), 2)
@@ -172,21 +175,42 @@ def find_json(output):
 
 # Simply renders the audio to file and gets its size.
 # This is the most precise way of knowing the final audio size and rendering this takes a fraction of the time it takes to render the video.
-# Returns a tuple containing the audio bit rate and normalization parameters if applicable
+# Returns a tuple containing the audio bit rate, normalization parameters if applicable, and the 5.1 surround workaround flag if applicable
 def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode, normalize):
     if str(mode) == 'wsg' or str(mode) == 'gif':
+        surround_workaround = False # For working around a known bug in libopus: https://trac.ffmpeg.org/ticket/5718
+        surround_workaround_args = ['-af', "channelmap=channel_layout=5.1"]
         output = 'temp.opus'
         if os.path.isfile(output):
             os.remove(output)
         ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', 'libopus', '-b:a', audio_bitrate]
         if track is not None: # Optional audio track selection
             ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
-        ffmpeg_cmd.append(output)
-        result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        ffmpeg_cmd1 = ffmpeg_cmd.copy()
+        ffmpeg_cmd1.append(output)
+        result = subprocess.run(ffmpeg_cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0 or not os.path.isfile(output):
-            print(' '.join(ffmpeg_cmd))
-            print(result.stderr)
-            raise RuntimeError('Error rendering audio. ffmpeg return code: {}'.format(result.returncode))
+            for line in result.stderr.splitlines():
+                # Try to rerun with 5.1 workaround
+                if 'libopus' in line and 'Invalid channel layout 5.1' in line:
+                    surround_workaround = True
+                    ffmpeg_cmd2 = ffmpeg_cmd.copy()
+                    ffmpeg_cmd2.extend(surround_workaround_args)
+                    ffmpeg_cmd2.append(output)
+                    print('Warning: ffmpeg returned status code {}. Trying 5.1 workaround.'.format(result.returncode))
+                    if os.path.isfile(output):
+                        os.remove(output)
+                    result = subprocess.run(ffmpeg_cmd2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if result.returncode != 0 or not os.path.isfile(output):
+                        print(' '.join(ffmpeg_cmd2))
+                        print(result.stderr)
+                        raise RuntimeError('Error rendering audio. ffmpeg return code: {}'.format(result.returncode))
+                    else:
+                        break
+            if not surround_workaround:
+                print(' '.join(ffmpeg_cmd1))
+                print(result.stderr)
+                raise RuntimeError('Error rendering audio. ffmpeg return code: {}'.format(result.returncode))
         if normalize:
             print('Normalizing audio (1st pass)')
             null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1, need to output to appropriate null depending on system
@@ -206,27 +230,29 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', 'libopus', '-filter:a', 'loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}'.format(params['input_i'], params['input_lra'], params['input_tp'], params['input_thresh']), '-b:a', audio_bitrate]
                 if track is not None: # Optional audio track selection
                     ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
+                if surround_workaround:
+                    ffmpeg_cmd.extend(surround_workaround_args)
                 ffmpeg_cmd.append(output2)
                 result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 if result.returncode == 0 and os.path.isfile(output2):
-                    return [os.path.getsize(output2), params]
+                    return [os.path.getsize(output2), params, surround_workaround]
                 else:
                     print('Warning: Could not render normalized audio. Skipping normalization.')
                     print('Debug info:')
                     print('ffmpeg return code: {}'.format(result.returncode))
                     print('stdout: {}'.format(result.stdout))
                     print('stderr: {}'.format(result.stderr))
-                    return [os.path.getsize(output), None]
+                    return [os.path.getsize(output), None, surround_workaround]
             else:
                 print('Warning: Could not process normalized audio. Skipping normalization.')
                 print('Debug info:')
                 print('ffmpeg return code: {}'.format(result.returncode))
                 print('stdout: {}'.format(result.stdout))
                 print('stderr: {}'.format(result.stderr))
-                return [os.path.getsize(output), None]
-        return [os.path.getsize(output), None]
+                return [os.path.getsize(output), None, surround_workaround]
+        return [os.path.getsize(output), None, surround_workaround]
     else: # No audio
-        return [0, None]
+        return [0, None, False]
 
 # Attempt to compensate for calculated bitrate to prevent file size overshoot
 # User can also manually specify additional compensation through the -b argument
@@ -320,7 +346,7 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, deblock : bool, deflicker : bool, decimate : bool, subtitles, track, full_video : bool, mode : ConvertMode, dry_run : bool):
+def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, deblock : bool, deflicker : bool, decimate : bool, subtitles, track, surround : bool, full_video : bool, mode : ConvertMode, dry_run : bool):
     ffmpeg_args = ["ffmpeg"]
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
@@ -391,11 +417,17 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
             if len(audio_tracks.items()) > 1:
                 print('Multiple audio tracks detected, selecting track 0.')
                 pass2.extend(['-map', '0:v:0', '-map', '0:a:0'])
+        
         if np is not None: # Add audio normalization parameters if they exist
             # https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg
             # https://superuser.com/questions/1312811/ffmpeg-loudnorm-2pass-in-single-line
-            pass2.extend(["-filter:a", "loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}"
-            .format(np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh'])])
+            surround_args = ''
+            if surround: # Tack on the 5.1 surround workaround filter if applicable
+                surround_args = "channelmap=channel_layout=5.1,"   
+            pass2.extend(["-filter:a", "{}loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}"
+            .format(surround_args, np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh'])])
+        elif surround:
+            pass2.extend(['-af', "channelmap=channel_layout=5.1"])
         pass2.extend(["-c:a", "libopus", '-b:a', audio_bitrate])
     else:
         pass2.extend(["-an"]) # No audio
@@ -451,8 +483,9 @@ def process_video(input_filename, start, duration, args, full_video):
     audio_kbps = calculate_target_audio_rate(duration, args.music_mode, args.mode)
     audio_bitrate = '{}k'.format(audio_kbps)
     print(audio_bitrate)
+    print('Calculating audio size')
     # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
-    audio_size, np = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, args.normalize)
+    audio_size, np, surround_workaround = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, args.normalize)
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
     target_kbps = min((int)(size_kb / duration.total_seconds()), max_kbps) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
@@ -522,7 +555,7 @@ def process_video(input_filename, start, duration, args, full_video):
     else:
         print(resolution)
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, args.deblock, args.deflicker, args.decimate, subs, audio_track, full_video, args.mode, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, args.deblock, args.deflicker, args.decimate, subs, audio_track, surround_workaround, full_video, args.mode, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
