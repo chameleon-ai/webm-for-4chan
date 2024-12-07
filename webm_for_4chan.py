@@ -602,6 +602,11 @@ def process_video(input_filename, start, duration, args, full_video):
             print('WARNING: Output size exceeded target maximum {}. You should rerun with --bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
     return output
 
+def cleanup():
+    for filename in ['temp.opus', 'temp.normalized.opus', 'temp.ass', 'ffmpeg2pass-0.log']:
+        if os.path.isfile(filename):
+            os.remove(filename)
+
 if __name__ == '__main__':
     try:
         parser = argparse.ArgumentParser(
@@ -687,6 +692,8 @@ if __name__ == '__main__':
                 raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
             result = process_video(input_filename, start_time, duration, args, full_video)
             print('output file: "{}"'.format(result))
+            if not args.dry_run:
+                cleanup()
         else:
             print('Input file not found: "' + input_filename + '"')
     except argparse.ArgumentError as e:
