@@ -100,6 +100,15 @@ class ConvertMode(Enum):
     def __str__(self):
         return self.value
 
+# Scales resolution sources above 1080p down to 1080. Resolutions below this remain unchanged.
+def scale_to_1080(width, height):
+    # Use original resolution if it's below 1080p
+    if (width * height) <= (1920 * 1080):
+        return [width, height]
+    min_dimension = min(width, height)
+    scale_factor = 1080 / min_dimension
+    return [width * scale_factor, height * scale_factor]
+
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
 def calculate_target_resolution(duration, input_filename, target_bitrate):
     try:
@@ -107,9 +116,11 @@ def calculate_target_resolution(duration, input_filename, target_bitrate):
         result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
         if result.returncode == 0:
             # Grab the largest dimension of the video's resolution
-            width, height = [int(x) for x in result.stdout.strip().split(',')]
+            raw_width, raw_height = [int(x) for x in result.stdout.strip().split(',')]
+            raw_max_dimension = max(raw_width, raw_height)
+            # The curve was tuned at 1080p. 4k sources cause an over-estimation, so we have to scale large sources down to 1080 for size calculation purposes
+            width, height = scale_to_1080(raw_width, raw_height)
             total_pixels = width * height
-            max_dimension = max(width, height)
             x = target_bitrate * total_pixels # Factor in the total resolution of the image and the bit rate
             # Calculate the ideal resolution using logarithmic curve: y = a * ln(x/b)
             # Parameters calculated with the help of https://curve.fit, values based on the fallback map
@@ -123,7 +134,7 @@ def calculate_target_resolution(duration, input_filename, target_bitrate):
                     nearest_resolution = res
                 else:
                     break
-            if max_dimension <= nearest_resolution: # No need to resize if the resolution we calculated is bigger than the native res
+            if raw_max_dimension <= nearest_resolution: # No need to resize if the resolution we calculated is bigger than the native res
                 return None # Return None to signal that the video should not be resized
             return nearest_resolution
         else:
