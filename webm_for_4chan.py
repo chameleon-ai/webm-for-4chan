@@ -22,9 +22,11 @@ resolution_map = { # Map of clip duration to resolution. Clip must be below the 
     30.0: 1600,
     45.0: 1440,
     75.0: 1280,
-    145.0: 1024,
-    190.0: 720,
-    270.0: 640,
+    115.0: 1024,
+    145.0: 960,
+    185.0: 840,
+    245.0: 720,
+    285.0: 640,
     330.0: 576,
     400.0: 480
 }
@@ -32,8 +34,10 @@ resolution_map_gif = { # Separate resolution lookup for gif mode (4MB w/ sound)
     15.0: 1600,
     30.0: 1280,
     45.0: 1024,
-    75.0: 720,
-    90.0: 640,
+    60.0: 960,
+    75.0: 840,
+    90.0: 720,
+    105.0: 640,
     120.0: 576
 }
 fps_map = { # Map of clip duration to fps. Clip must be below the duration to fit into the fps cap
@@ -42,7 +46,7 @@ fps_map = { # Map of clip duration to fps. Clip must be below the duration to fi
     400.0: 24.0
 }
 audio_map = { # Map of clip duration to audio bitrate. Very long clips benefit from audio bitrate reduction, but not ideal for music oriented webms. Use --music_mode to bypass.
-    90.0: 96,
+    60.0: 96,
     120.0: 80,
     240.0: 64,
     300.0: 56,
@@ -102,17 +106,16 @@ class ConvertMode(Enum):
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
 def calculate_target_resolution(duration, input_filename, mode : ConvertMode):
     native_res = None
-    try:
-        # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
-        result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
-        if result.returncode == 0:
-            # Grab the largest dimension of the video's resolution
-            native_res = max([int(x) for x in result.stdout.strip().split(',')])
-        else:
-            print('ffprobe returned error code {}'.format(result.returncode))
-            print('stdout: {}'.format(result.stdout))
-    except Exception as e:
-        print('Error getting input resolution. Using no input resolution assumptions')
+    # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
+    result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
+    if result.returncode == 0:
+        # Grab the largest dimension of the video's resolution
+        native_res = max([int(x) for x in result.stdout.strip().split(',')])
+    else:
+        print(result.stdout)
+        print('ffprobe returned error code {}'.format(result.returncode))
+        print('Error getting input resolution. Using no input resolution assumptions.')
+        
     calculated_res = 1920
     resmap = resolution_map_gif if str(mode) == 'gif' else resolution_map
     for key in sorted(resmap):
@@ -135,7 +138,9 @@ def calculate_target_fps(input_filename, duration):
     result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", input_filename], stdout=subprocess.PIPE, text=True)
     if result.returncode != 0:
         print(result.stdout)
-        raise RuntimeError('Error reading stream fps, ffprobe returned error code {}'.format(result.returncode))
+        print('ffprobe returned error code {}'.format(result.returncode))
+        print('Error getting input fps. Using no input fps assumptions.')
+        return frame_rate
     # Outputs the frame rate as a precise fraction. Have to convert to decimal.
     source_fps_fractional = result.stdout.split('/')
     source_fps = round(float(source_fps_fractional[0]) / float(source_fps_fractional[1]), 2)
