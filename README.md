@@ -67,7 +67,7 @@ Type `--help` for a complete list of commands.
 ## Extra Notes and Quirks
 - Audio bitrate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
-- It's tough to do one-size-fits-all automatic resolution scaling. Currently it is tuned to produce large resolutions, which can cause artifacts if the source has high motion or a lot of colors. If the output is a little too crunchy, I recommend specifying `--resolution` at one notch lower than what it automatically selected (you can find the resolution map at the top of the script)
+- It's tough to do one-size-fits-all automatic resolution scaling. Currently it is tuned to produce large resolutions, which can cause artifacts if the source has high motion or a lot of colors. If the output is a little too crunchy, I recommend specifying `--resolution` at one notch lower than what it automatically selected (you can find the resolution table at the top of the script)
 - If you don't want to resize it at all, use `--no_resize`
 - If you want to see the calculations and ffmpeg commands without rendering the clip, use `--dry_run`
 - The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.

@@ -9,15 +9,17 @@ import argparse
 import datetime
 from enum import Enum
 import json
+import math
 import os
 import platform
 import subprocess
 import time
 import traceback
 
-max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes
-max_duration = [400, 120] # Maximum clip durations, in seconds
-resolution_map = { # Map of clip duration to resolution. Clip must be below the specified duration to fit into the resolution
+max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
+max_duration = [400, 120] # Maximum clip durations, in seconds [wsg, all other boards]
+resolution_table = [480, 576, 640, 720, 840, 960, 1024, 1280, 1440, 1600, 1920, 2048] # Table of discrete resolutions
+resolution_fallback_map = { # This time-based lookup is used if smart resolution calculation fails for some reason
     15.0: 1920,
     30.0: 1600,
     45.0: 1440,
@@ -29,16 +31,6 @@ resolution_map = { # Map of clip duration to resolution. Clip must be below the 
     285.0: 640,
     330.0: 576,
     400.0: 480
-}
-resolution_map_gif = { # Separate resolution lookup for gif mode (4MB w/ sound)
-    15.0: 1600,
-    30.0: 1280,
-    45.0: 1024,
-    60.0: 960,
-    75.0: 840,
-    90.0: 720,
-    105.0: 640,
-    120.0: 576
 }
 fps_map = { # Map of clip duration to fps. Clip must be below the duration to fit into the fps cap
     150.0: 60.0,
@@ -104,26 +96,42 @@ class ConvertMode(Enum):
         return self.value
 
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
-def calculate_target_resolution(duration, input_filename, mode : ConvertMode):
-    native_res = None
-    # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
-    result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
-    if result.returncode == 0:
-        # Grab the largest dimension of the video's resolution
-        native_res = max([int(x) for x in result.stdout.strip().split(',')])
-    else:
-        print(result.stdout)
-        print('ffprobe returned error code {}'.format(result.returncode))
-        print('Error getting input resolution. Using no input resolution assumptions.')
-        
+def calculate_target_resolution(duration, input_filename, target_bitrate):
+    try:
+        # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
+        result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
+        if result.returncode == 0:
+            # Grab the largest dimension of the video's resolution
+            width, height = [int(x) for x in result.stdout.strip().split(',')]
+            total_pixels = width * height
+            max_dimension = max(width, height)
+            x = target_bitrate * total_pixels # Factor in the total resolution of the image and the bit rate
+            # Calculate the ideal resolution using logarithmic curve: y = a * ln(x/b)
+            # Parameters calculated with the help of https://curve.fit, values based on the fallback map
+            a = 4.086e+02
+            b = 5.154e+07
+            calculated_resolution = a * math.log(x/b)
+            #print('{}'.format(calculated_resolution))
+            nearest_resolution = resolution_table[0]
+            for res in resolution_table:
+                if calculated_resolution >= res:
+                    nearest_resolution = res
+                else:
+                    break
+            if max_dimension <= nearest_resolution: # No need to resize if the resolution we calculated is bigger than the native res
+                return None # Return None to signal that the video should not be resized
+            return nearest_resolution
+        else:
+            print(result.stdout)
+            print('ffprobe returned error code {}'.format(result.returncode))
+    except Exception as e:
+        print(e) 
+    print('Error getting input resolution. Falling back to time-based table.')   
     calculated_res = 1920
-    resmap = resolution_map_gif if str(mode) == 'gif' else resolution_map
-    for key in sorted(resmap):
+    for key in sorted(resolution_fallback_map):
         if duration.total_seconds() <= key:
-            calculated_res = resmap[key]
+            calculated_res = resolution_fallback_map[key]
             break
-    if native_res is not None and native_res <= calculated_res:
-        return None # Return None to signal that the video should not be resized
     return calculated_res
 
 # Same idea as the resolution lookup table but for fps. Also takes into account the source fps.
@@ -494,7 +502,8 @@ def process_video(input_filename, start, duration, args, full_video):
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
     target_kbps = min((int)(size_kb / duration.total_seconds()), max_kbps) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
-    video_bitrate = '{}k'.format(target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation)) # Subtract the compensation factor if specified
+    compensated_kbps = target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation) # Subtract the compensation factor if specified
+    video_bitrate = '{}k'.format(compensated_kbps)
 
     if args.crunchy: # lol
         video_bitrate = '8k'
@@ -554,7 +563,7 @@ def process_video(input_filename, start, duration, args, full_video):
         if args.resolution is not None: # Manual resolution override
             resolution = args.resolution
         else: # Use resolution lookup map
-            resolution = calculate_target_resolution(duration, input_filename, args.mode) # Look up the appropriate resolution cap in the table
+            resolution = calculate_target_resolution(duration, input_filename, compensated_kbps) # Look up the appropriate resolution cap in the table
     if resolution is None:
         print('same as source')
     else:
