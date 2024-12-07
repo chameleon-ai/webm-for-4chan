@@ -52,6 +52,11 @@ audio_map_gif = { # Separate audio lookup for gif mode (4MB w/ sound)
     60.0: 48,
     120.0: 32
 }
+audio_map_music_mode = { # Use high bit rate in music mode. Trying to keep the max size under 5.5MB.
+    285.0: 128,
+    330.0: 112,
+    400.0: 96
+}
 bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This value is subtracted to prevent file size overshoot, which tends to happen in longer files
     300.0: 0,
     400.0: 2
@@ -159,13 +164,15 @@ def calculate_target_fps(input_filename, duration):
 
 # Use audio lookup table
 def calculate_target_audio_rate(duration, music_mode, mode : ConvertMode):
+    audiomap = None
     if music_mode:
-        return 128 # Use high bit rate in music mode
-    audiomap = audio_map_gif if str(mode) == 'gif' else audio_map
+        audiomap = audio_map_music_mode
+    else:
+        audiomap = audio_map_gif if str(mode) == 'gif' else audio_map
     for key in sorted(audiomap):
         if duration.total_seconds() <= key:
             return audiomap[key]
-    return 96
+    return 96 # Unreachable code as long as the maps are set up correctly
 
 def find_json(output):
     # Admittedly this is a fragile way of finding the json output.
@@ -499,6 +506,7 @@ def process_video(input_filename, start, duration, args, full_video):
     print('Calculating audio size')
     # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
     audio_size, np, surround_workaround = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, args.normalize)
+    print('Audio size: {}kB'.format(int(audio_size/1024)))
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
     target_kbps = min((int)(size_kb / duration.total_seconds()), max_kbps) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
