@@ -110,7 +110,7 @@ def scale_to_1080(width, height):
     return [width * scale_factor, height * scale_factor]
 
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
-def calculate_target_resolution(duration, input_filename, target_bitrate):
+def calculate_target_resolution(duration, input_filename, target_bitrate, bypass_resolution_table : bool):
     try:
         # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
         result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
@@ -127,6 +127,11 @@ def calculate_target_resolution(duration, input_filename, target_bitrate):
             a = 4.086e+02
             b = 5.154e+07
             calculated_resolution = a * math.log(x/b)
+            if bypass_resolution_table: # Skip resolution table lookup and go to the nearest pixel
+                res = int(min(2048, calculated_resolution))
+                if raw_max_dimension <= res:
+                    return None
+                return res
             #print('{}'.format(calculated_resolution))
             nearest_resolution = resolution_table[0]
             for res in resolution_table:
@@ -582,7 +587,7 @@ def process_video(input_filename, start, duration, args, full_video):
         if args.resolution is not None: # Manual resolution override
             resolution = args.resolution
         else: # Use resolution lookup map
-            resolution = calculate_target_resolution(duration, input_filename, compensated_kbps) # Look up the appropriate resolution cap in the table
+            resolution = calculate_target_resolution(duration, input_filename, compensated_kbps, args.bypass_resolution_table) # Look up the appropriate resolution cap in the table
     if resolution is None:
         print('same as source')
     else:
@@ -624,6 +629,7 @@ if __name__ == '__main__':
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
+        parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
         parser.add_argument('--deblock', action='store_true', help='Apply deblock filter (see ffmpeg documentation)')
         parser.add_argument('--deflicker', action='store_true', help='Apply deflicker filter (see ffmpeg documentation)')
         parser.add_argument('--decimate', action='store_true', help='Apply decimate filter (see ffmpeg documentation)')

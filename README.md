@@ -5,10 +5,10 @@ Developed on Linux, probably works on Windows.
 
 ## Features
 - Precise size calculation, designed to render webms just under the size limit
-- Automatic resolution scaling based on length
-- Automatic bit-rate reduction based on length
-- Automatic volume normalization
-- Automatic cropping
+- Automatic resolution scaling
+- Automatic audio bit-rate reduction based on length
+- (optional) Automatic volume normalization
+- (optional) Automatic cropping
 - Precise clipping to the nearest millisecond
 - Audio track selection for multi-audio sources
 - Subtitle burn-in
@@ -69,6 +69,7 @@ Type `--help` for a complete list of commands.
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
 - It's tough to do one-size-fits-all automatic resolution scaling. Currently it is tuned to produce large resolutions, which can cause artifacts if the source has high motion or a lot of colors. If the output is a little too crunchy, I recommend specifying `--resolution` at one notch lower than what it automatically selected (you can find the resolution table at the top of the script)
 - If you don't want to resize it at all, use `--no_resize`
+- Dynamic resolution calculation will snap to a standard resolution size as defined in the resolution table. You can skip this with `--bypass_resolution_table`
 - If you want to see the calculations and ffmpeg commands without rendering the clip, use `--dry_run`
 - The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
