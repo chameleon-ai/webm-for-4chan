@@ -65,7 +65,7 @@ Also supports a handful of other ffmpeg video filters with `--deblock`, `--defli
 Type `--help` for a complete list of commands.
 
 ## Extra Notes and Quirks
-- Audio bitrate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`
+- Audio bit-rate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
 - It's tough to do one-size-fits-all automatic resolution scaling. Currently it is tuned to produce large resolutions, which can cause artifacts if the source has high motion or a lot of colors. If the output is a little too crunchy, I recommend specifying `--resolution` at one notch lower than what it automatically selected (you can find the resolution table at the top of the script)
 - If you don't want to resize it at all, use `--no_resize`
