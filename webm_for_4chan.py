@@ -184,6 +184,8 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
         ffmpeg_cmd.append(output)
         result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0 or not os.path.isfile(output):
+            print(' '.join(ffmpeg_cmd))
+            print(result.stderr)
             raise RuntimeError('Error rendering audio. ffmpeg return code: {}'.format(result.returncode))
         if normalize:
             print('Normalizing audio (1st pass)')
