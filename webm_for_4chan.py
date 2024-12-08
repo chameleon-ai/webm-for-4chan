@@ -332,6 +332,48 @@ def list_audio(input_filename):
         print(result.stdout)
         raise RuntimeError('ffprobe returned code {}'.format(result.returncode))
 
+def blackframe(input_filename, start, duration):
+    print('Running blackframe detection')
+    try:
+        result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vf', 'blackframe=threshold=96:amount=92', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            print(result.stderr.decode())
+            raise RuntimeError('ffmpeg returned code {}'.format(result.returncode))
+        output = result.stderr.decode().splitlines()
+        detected_frames = dict()
+        for line in output:
+            # Attempt to identify output that has blackframe parameters
+            if 'blackframe' in line and 'frame:' in line and 't:' in line:
+                frame = None
+                t = None
+                for param in line.split():
+                    if ':' in param:
+                        key, value = param.split(':')
+                        if key == 'frame':
+                            frame = int(value)
+                        if key == 't':
+                            t = value
+                if frame is not None and t is not None:
+                    detected_frames[frame] = t
+        if len(detected_frames) > 0:
+            # Detect contiguous frames, assuming the first frame is 1
+            last_frame = 0
+            last_ts = None
+            frame_dt = 0 # use dt between frames to advance one frame past the last detected black frame
+            for key, value in detected_frames.items():
+                if last_frame + 1 == key:
+                    last_frame = key
+                    ts = float(value)
+                    frame_dt = ts - last_ts if last_ts is not None else 0
+                    last_ts = ts
+            #print('dt {}'.format(frame_dt))
+            if last_ts is not None:
+                return datetime.timedelta(seconds=last_ts+frame_dt)
+    except Exception as e:
+        print(e)
+        print('Error detecting blackframes. Skipping step.')
+    return datetime.timedelta(seconds=0)
+
 def cropdetect(input_filename, start, duration):
     print('Running cropdetect')
     result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vf', 'cropdetect', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -486,6 +528,14 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
     
+    if args.blackframe:
+        frame_skip = blackframe(input_filename, start, duration)
+        if frame_skip.total_seconds() > 0:
+            start += frame_skip
+            duration -= frame_skip
+            full_video = False # If skipping frames, it can no longer be possible that full video is rendered
+        print('Advancing start time by {}'.format(frame_skip))
+
     audio_track = None
     if args.audio_index is not None:
         track_list = list_audio(input_filename)
@@ -625,6 +675,7 @@ if __name__ == '__main__':
         parser.add_argument('-c', '--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('-n', '--normalize', action='store_true', help='Enable 2-pass audio normalization.')
         parser.add_argument('--auto_crop', action='store_true', help="Automatic crop using cropdetect.")
+        parser.add_argument('--blackframe', action='store_true', help="Skip initial black frames using a first pass with blackframe filter.")
         parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")
         parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
         parser.add_argument('--auto_subs', action='store_true', help="Automatically burn-in the first embedded subtitles, if they exist")

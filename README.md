@@ -12,6 +12,7 @@ Developed on Linux, probably works on Windows.
 - Precise clipping to the nearest millisecond
 - Audio track selection for multi-audio sources
 - Subtitle burn-in
+- Skip black frames at the start of a video
 - Music mode optimized for songs
 
 ## How Does it Work?
@@ -55,12 +56,13 @@ To render up to 4MiB with sound, use `--mode gif`\
 To render up to 4MiB with no sound, use `--mode other`
 
 Enable audio volume normalization with `--normalize`\
+Skip black frames at the start of the video with `--blackframe`\
 Crop using automatic edge detection with `--auto_crop`\
 Crop using manually specified boundaries with `--crop`\
 Automatically burn-in the first available subtitles, if any exist, with `--auto_subs`\
 Print available subtitles with  `--list_subs`\
 Print available audio tracks with  `--list_audio`\
-Also supports a handful of other ffmpeg video filters with `--deblock`, `--deflicker`, and `--decimate`
+Also supports a handful of other ffmpeg video filters with `--deblock`, `--deflicker`, `--decimate`, and `--monochrome`
 
 Type `--help` for a complete list of commands.
 
