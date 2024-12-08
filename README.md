@@ -63,6 +63,7 @@ Automatically burn-in the first available subtitles, if any exist, with `--auto_
 Print available subtitles with  `--list_subs`\
 Print available audio tracks with  `--list_audio`\
 Also supports a handful of other ffmpeg video filters with `--deblock`, `--deflicker`, `--decimate`, and `--monochrome`
+Manually specify arbitrary audio and video filters for ffmpeg with `--audio_filter` and `--video_filter`
 
 Type `--help` for a complete list of commands.
 

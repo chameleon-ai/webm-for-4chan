@@ -424,7 +424,7 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, extra_filters : list, subtitles, track, surround : bool, full_video : bool, mode : ConvertMode, dry_run : bool):
+def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, mode : ConvertMode, dry_run : bool):
     ffmpeg_args = ["ffmpeg"]
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
@@ -444,7 +444,7 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
         vf_args += 'fps={}'.format(fps)
     else:
         print('same as source')
-    for filter in extra_filters:
+    for filter in extra_vf:
         if vf_args != '':
             vf_args += ',' # Tack on to other args if string isn't empty
         vf_args += filter
@@ -487,17 +487,14 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
             if len(audio_tracks.items()) > 1:
                 print('Multiple audio tracks detected, selecting track 0.')
                 pass2.extend(['-map', '0:v:0', '-map', '0:a:0'])
-        
-        if np is not None: # Add audio normalization parameters if they exist
-            # https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg
-            # https://superuser.com/questions/1312811/ffmpeg-loudnorm-2pass-in-single-line
-            surround_args = ''
-            if surround: # Tack on the 5.1 surround workaround filter if applicable
-                surround_args = "channelmap=channel_layout=5.1,"   
-            pass2.extend(["-filter:a", "{}loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}"
-            .format(surround_args, np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh'])])
-        elif surround:
-            pass2.extend(['-af', "channelmap=channel_layout=5.1"])
+        af_args = ''
+        for filter in extra_af: # Apply miscellaneous filters
+            if af_args != '':
+                af_args += ',' # Tack on to other args if string isn't empty
+            af_args += filter
+        if af_args != '':
+            pass2.append('-af')
+            pass2.append(af_args)
         pass2.extend(["-c:a", "libopus", '-b:a', audio_bitrate])
     else:
         pass2.extend(["-an"]) # No audio
@@ -634,17 +631,33 @@ def process_video(input_filename, start, duration, args, full_video):
         print('same as source')
     else:
         print(resolution)
-    # The main part where the video is rendered
-    extra_filters = []
+    
+    # Add miscellaneous video filters
+    extra_vf = []
     if args.deblock:
-        extra_filters.append('deblock')
+        extra_vf.append('deblock')
     if args.deflicker:
-        extra_filters.append('deflicker')
+        extra_vf.append('deflicker')
     if args.decimate:
-        extra_filters.append('decimate')
+        extra_vf.append('decimate')
     if args.monochrome:
-        extra_filters.append('monochrome')
-    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, np, crop, extra_filters, subs, audio_track, surround_workaround, full_video, args.mode, args.dry_run)
+        extra_vf.append('monochrome')
+    if args.video_filter is not None:
+        extra_vf.append(args.video_filter)
+    
+    # Add miscellaneous audio filters
+    extra_af = []
+    if surround_workaround:
+        extra_af.append("channelmap=channel_layout=5.1") # Tack on the 5.1 surround workaround filter if applicable
+    if np is not None: # Add audio normalization parameters if they exist
+        # https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg
+        # https://superuser.com/questions/1312811/ffmpeg-loudnorm-2pass-in-single-line
+        extra_af.append("loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}".format(np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh']))
+    if args.audio_filter is not None:
+        extra_af.append(args.audio_filter)
+
+    # The main part where the video is rendered
+    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, crop, extra_vf, extra_af, subs, audio_track, full_video, args.mode, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -674,6 +687,8 @@ if __name__ == '__main__':
         parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")
         parser.add_argument('-c', '--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('-n', '--normalize', action='store_true', help='Enable 2-pass audio normalization.')
+        parser.add_argument('-v', '--video_filter', type=str, help="Video filter arguments. This string is passed directly to the -vf chain.")
+        parser.add_argument('-a', '--audio_filter', type=str, help="Audio filter arguments. This string is passed directly to the -af chain.")
         parser.add_argument('--auto_crop', action='store_true', help="Automatic crop using cropdetect.")
         parser.add_argument('--blackframe', action='store_true', help="Skip initial black frames using a first pass with blackframe filter.")
         parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")
