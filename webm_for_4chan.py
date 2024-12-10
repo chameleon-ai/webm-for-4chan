@@ -424,7 +424,7 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, mode : ConvertMode, dry_run : bool):
+def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, mode : ConvertMode, fast : bool, dry_run : bool):
     ffmpeg_args = ["ffmpeg"]
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
@@ -468,8 +468,10 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
     if vf_args != '': # Add video filter if there are any arguments
         ffmpeg_args.extend(["-vf", vf_args])
     print('Target bitrate: {}'.format(video_bitrate))
-    vp9_args = ["-c:v", "libvpx-vp9", "-deadline", deadline]
+    vp9_args = ["-c:v", "libvpx-vp9", "-deadline", 'good' if fast else deadline]
     ffmpeg_args.extend(vp9_args)
+    if fast:
+        ffmpeg_args.extend(["-cpu-used", "5"]) # By default, this is 0, 5 means worst quality but fastest
     if mt: # Enable multithreading
         ffmpeg_args.extend(["-row-mt", "1"])
     ffmpeg_args.extend(["-b:v", video_bitrate, "-async", "1", "-vsync", "2"])
@@ -650,7 +652,7 @@ def process_video(input_filename, start, duration, args, full_video):
         extra_af.append(args.audio_filter)
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, args.deadline, not args.no_mt, crop, extra_vf, extra_af, subs, audio_track, full_video, args.mode, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, args.deadline, not args.no_mt, crop, extra_vf, extra_af, subs, audio_track, full_video, args.mode, args.fast, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -696,6 +698,7 @@ if __name__ == '__main__':
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
+        parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
         parser.add_argument('--deadline', type=str, default='best', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "best". "good" is faster but lower quality. See libvpx-vp9 documentation for details.')
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         args, unknown_args = parser.parse_known_args()

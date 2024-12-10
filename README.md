@@ -75,6 +75,7 @@ Type `--help` for a complete list of commands.
 - If you want to see the calculations and ffmpeg commands without rendering the clip, use `--dry_run`
 - The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.
 - The vp9 encoder's deadline argument is set to `best` by default. Faster encoding at the expense of quality can be achieved with `--deadline good`
+- Use `--fast` to significantly speed up encoding at the expense of quality and rate control accuracy.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
 - The file 'temp.ass' is generated if burning in soft subs. I tried using the subs directly from the video, but this didn't work well when making clips, so I had to resort to exporting to a separate file.
