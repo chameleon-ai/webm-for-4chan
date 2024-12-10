@@ -424,7 +424,7 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, mode : ConvertMode, dry_run : bool):
+def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, mode : ConvertMode, dry_run : bool):
     ffmpeg_args = ["ffmpeg"]
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
@@ -468,7 +468,11 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
     if vf_args != '': # Add video filter if there are any arguments
         ffmpeg_args.extend(["-vf", vf_args])
     print('Target bitrate: {}'.format(video_bitrate))
-    ffmpeg_args.extend(["-c:v", "libvpx-vp9", "-b:v", video_bitrate, "-async", "1", "-vsync", "2"])
+    vp9_args = ["-c:v", "libvpx-vp9", "-deadline", deadline]
+    ffmpeg_args.extend(vp9_args)
+    if mt: # Enable multithreading
+        ffmpeg_args.extend(["-row-mt", "1"])
+    ffmpeg_args.extend(["-b:v", video_bitrate, "-async", "1", "-vsync", "2"])
 
     # The constructed ffmpeg commands
     pass1 = ffmpeg_args
@@ -568,9 +572,6 @@ def process_video(input_filename, start, duration, args, full_video):
     compensated_kbps = target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation) # Subtract the compensation factor if specified
     video_bitrate = '{}k'.format(compensated_kbps)
 
-    if args.crunchy: # lol
-        video_bitrate = '8k'
-
     # Determine if we need to burn in subtitles
     subs = ''
     if args.sub_file is not None:
@@ -634,14 +635,6 @@ def process_video(input_filename, start, duration, args, full_video):
     
     # Add miscellaneous video filters
     extra_vf = []
-    if args.deblock:
-        extra_vf.append('deblock')
-    if args.deflicker:
-        extra_vf.append('deflicker')
-    if args.decimate:
-        extra_vf.append('decimate')
-    if args.monochrome:
-        extra_vf.append('monochrome')
     if args.video_filter is not None:
         extra_vf.append(args.video_filter)
     
@@ -657,7 +650,7 @@ def process_video(input_filename, start, duration, args, full_video):
         extra_af.append(args.audio_filter)
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, crop, extra_vf, extra_af, subs, audio_track, full_video, args.mode, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, args.deadline, not args.no_mt, crop, extra_vf, extra_af, subs, audio_track, full_video, args.mode, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -701,12 +694,9 @@ if __name__ == '__main__':
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
+        parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
-        parser.add_argument('--deblock', action='store_true', help='Apply deblock filter (see ffmpeg documentation)')
-        parser.add_argument('--deflicker', action='store_true', help='Apply deflicker filter (see ffmpeg documentation)')
-        parser.add_argument('--decimate', action='store_true', help='Apply decimate filter (see ffmpeg documentation)')
-        parser.add_argument('--monochrome', action='store_true', help='Apply monochrome filter (see ffmpeg documentation)')
-        parser.add_argument('--crunchy', action='store_true', help="Make it crunchy (fast test encode when --dry_run isn't enough)")
+        parser.add_argument('--deadline', type=str, default='best', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "best". "good" is faster but lower quality. See libvpx-vp9 documentation for details.')
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         args, unknown_args = parser.parse_known_args()
         if help in args:
