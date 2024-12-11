@@ -522,7 +522,10 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
         # Use popen so we can pend on completion
         pope = subprocess.Popen(pass2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
         for line in iter(pope.stderr.readline, ""):
-            print(line, end='')
+            if 'frame=' in line:
+                print('\r' + line.strip(), end='')
+            else:
+                print(line, end='')
         pope.stderr.close()
         pope.wait()
         if pope.returncode != 0:
