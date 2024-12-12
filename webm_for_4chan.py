@@ -16,6 +16,7 @@ import subprocess
 import time
 import traceback
 
+max_bitrate = 2800 # (kbps) Cap bitrate in case the clip is really short. This is already an absurdly high rate.
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
 max_duration = [400, 120] # Maximum clip durations, in seconds [wsg, all other boards]
 resolution_table = [480, 576, 640, 720, 840, 960, 1024, 1280, 1440, 1600, 1920, 2048] # Table of discrete resolutions
@@ -100,54 +101,78 @@ class ConvertMode(Enum):
     def __str__(self):
         return self.value
 
-# Scales resolution sources above 1080p down to 1080. Resolutions below this remain unchanged.
+# Different resolution scaling options
+class ResizeMode(Enum):
+    cubic = 'cubic'
+    logarithmic = 'logarithmic'
+    table = 'table'
+    def __str__(self):
+        return self.value
+
+# Scales resolution sources to 1080p to match the calibrated resolution curve
 def scale_to_1080(width, height):
-    # Use original resolution if it's below 1080p
-    if (width * height) <= (1920 * 1080):
-        return [width, height]
     min_dimension = min(width, height)
     scale_factor = 1080 / min_dimension
     return [width * scale_factor, height * scale_factor]
 
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
-def calculate_target_resolution(duration, input_filename, target_bitrate, bypass_resolution_table : bool):
-    try:
-        # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
-        result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
-        if result.returncode == 0:
-            # Grab the largest dimension of the video's resolution
-            raw_width, raw_height = [int(x) for x in result.stdout.strip().split(',')]
-            raw_max_dimension = max(raw_width, raw_height)
-            # The curve was tuned at 1080p. 4k sources cause an over-estimation, so we have to scale large sources down to 1080 for size calculation purposes
-            width, height = scale_to_1080(raw_width, raw_height)
-            total_pixels = width * height
-            x = target_bitrate * total_pixels # Factor in the total resolution of the image and the bit rate
-            # Calculate the ideal resolution using logarithmic curve: y = a * ln(x/b)
-            # Parameters calculated with the help of https://curve.fit, values based on the fallback map
-            a = 4.086e+02
-            b = 5.154e+07
-            calculated_resolution = a * math.log(x/b)
-            if bypass_resolution_table: # Skip resolution table lookup and go to the nearest pixel
-                res = int(min(2048, calculated_resolution))
-                if raw_max_dimension <= res:
-                    return None
-                return res
-            #print('{}'.format(calculated_resolution))
-            nearest_resolution = resolution_table[0]
-            for res in resolution_table:
-                if calculated_resolution >= res:
-                    nearest_resolution = res
-                else:
-                    break
-            if raw_max_dimension <= nearest_resolution: # No need to resize if the resolution we calculated is bigger than the native res
-                return None # Return None to signal that the video should not be resized
-            return nearest_resolution
-        else:
-            print(result.stdout)
-            print('ffprobe returned error code {}'.format(result.returncode))
-    except Exception as e:
-        print(e) 
-    print('Error getting input resolution. Falling back to time-based table.')   
+def calculate_target_resolution(duration, input_filename, target_bitrate, resizing_mode : ResizeMode, bypass_resolution_table : bool):
+    if str(resizing_mode) != 'table':
+        try:
+            # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
+            result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
+            if result.returncode == 0:
+                # Grab the largest dimension of the video's resolution
+                raw_width, raw_height = [int(x) for x in result.stdout.strip().split(',')]
+                raw_max_dimension = max(raw_width, raw_height)
+                # The curve was tuned at 1080p. 4k sources cause an over-estimation, so we have to scale large sources down to 1080 for size calculation purposes
+                width, height = scale_to_1080(raw_width, raw_height)
+                total_pixels = width * height
+                calculated_resolution = 0
+                scale_factor = 1.0
+                # Calculate resolution
+                if str(resizing_mode) == 'logarithmic':
+                    x = target_bitrate * total_pixels # Factor in the total resolution of the image and the bit rate
+                    # Calculate the ideal resolution using logarithmic curve: y = a * ln(x/b)
+                    # Parameters calculated with the help of https://curve.fit, values based on the fallback map
+                    a = 2.311e-01
+                    b = 3.547e+01
+                    scale_factor = a * math.log(target_bitrate/b)
+                elif str(resizing_mode) == 'cubic':
+                    a = 1.318e-10
+                    b = -6.532e-07
+                    c = 1.110e-03
+                    d = 1.977e-01
+                    x = target_bitrate
+                    # Standard cubic equation: y = ax^3 + bx^2 + cx + d
+                    # Note that a similar curve fit from above was used, but this follows a cubic curve which has steeper rolloff at the beginning
+                    scale_factor = a * math.pow(x,3) + b * pow(x,2) + c * x + d
+                scaled_pixels = total_pixels * scale_factor
+                scaled_height = scaled_pixels / width
+                scaled_width = scaled_pixels / height
+                calculated_resolution = max(scaled_height, scaled_width)
+                # Either use raw calculated resolution or nearest standard resolution 
+                if bypass_resolution_table: # Skip resolution table lookup and go to the nearest pixel
+                    res = int(min(2048, calculated_resolution))
+                    if raw_max_dimension <= res:
+                        return None
+                    return res
+                    #print('{}'.format(calculated_resolution))
+                nearest_resolution = resolution_table[0]
+                for res in resolution_table:
+                    if calculated_resolution >= res:
+                        nearest_resolution = res
+                    else:
+                        break
+                if raw_max_dimension <= nearest_resolution: # No need to resize if the resolution we calculated is bigger than the native res
+                    return None # Return None to signal that the video should not be resized
+                return nearest_resolution
+            else:
+                print(result.stdout)
+                print('ffprobe returned error code {}'.format(result.returncode))
+        except Exception as e:
+            print(e) 
+        print('Error getting input resolution. Falling back to time-based table.')   
     calculated_res = 1920
     for key in sorted(resolution_fallback_map):
         if duration.total_seconds() <= key:
@@ -561,7 +586,6 @@ def process_video(input_filename, start, duration, args, full_video):
             print('Warning: Audio language {} not found, using default audio track.'.format(args.audio_lang))
 
     # Calculate video bitrate by first calculating the audio size and subtracting it
-    max_kbps = 2800 # Cap bitrate in case the clip is really short. This is already an absurdly high rate.
     size_limit = max_size[0] if str(args.mode) == 'wsg' else max_size[1] # Look up the size cap depending on the board it's destined for
     print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
     audio_kbps = calculate_target_audio_rate(duration, args.music_mode, args.mode)
@@ -573,7 +597,7 @@ def process_video(input_filename, start, duration, args, full_video):
     print('Audio size: {}kB'.format(int(audio_size/1024)))
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
-    target_kbps = min((int)(size_kb / duration.total_seconds()), max_kbps) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
+    target_kbps = min((int)(size_kb / duration.total_seconds()), max_bitrate) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
     compensated_kbps = target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation) # Subtract the compensation factor if specified
     video_bitrate = '{}k'.format(compensated_kbps)
 
@@ -632,7 +656,7 @@ def process_video(input_filename, start, duration, args, full_video):
         if args.resolution is not None: # Manual resolution override
             resolution = args.resolution
         else: # Use resolution lookup map
-            resolution = calculate_target_resolution(duration, input_filename, compensated_kbps, args.bypass_resolution_table) # Look up the appropriate resolution cap in the table
+            resolution = calculate_target_resolution(duration, input_filename, compensated_kbps, args.resize_mode, args.bypass_resolution_table) # Look up the appropriate resolution cap in the table
     if resolution is None:
         print('same as source')
     else:
@@ -701,6 +725,7 @@ if __name__ == '__main__':
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
+        parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
         parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
         parser.add_argument('--deadline', type=str, default='best', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "best". "good" is faster but lower quality. See libvpx-vp9 documentation for details.')
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
