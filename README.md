@@ -75,7 +75,7 @@ Type `--help` for a complete list of commands.
 - The method of calculating the resolution can be altered with `--resize_mode`. All options produce similar results, but `--resize_mode cubic` usually results in lower resolutions than the default of `logarithmic`. Instead of a bit-rate based calculation, a time-based lookup table can also be used with `--resize_mode table`. Note that this doesn't alter how ffmpeg resizes the video, it only affects what target resolution is chosen.
 - If you want to see the calculations and ffmpeg commands without rendering the clip, use `--dry_run`
 - The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.
-- The vp9 encoder's deadline argument is set to `best` by default. Faster encoding at the expense of quality can be achieved with `--deadline good`
+- The vp9 encoder's deadline argument is set to `good` by default. Better quality, but much slower, encoding can be achieved with `--deadline best`
 - Use `--fast` to significantly speed up encoding at the expense of quality and rate control accuracy.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.

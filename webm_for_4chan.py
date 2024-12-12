@@ -727,7 +727,7 @@ if __name__ == '__main__':
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
         parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
         parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
-        parser.add_argument('--deadline', type=str, default='best', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "best". "good" is faster but lower quality. See libvpx-vp9 documentation for details.')
+        parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         args, unknown_args = parser.parse_known_args()
         if help in args:
