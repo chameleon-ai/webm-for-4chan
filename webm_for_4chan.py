@@ -20,6 +20,7 @@ max_bitrate = 2800 # (kbps) Cap bitrate in case the clip is really short. This i
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
 max_duration = [400, 120] # Maximum clip durations, in seconds [wsg, all other boards]
 resolution_table = [480, 576, 640, 720, 840, 960, 1024, 1280, 1440, 1600, 1920, 2048] # Table of discrete resolutions
+audio_bitrate_table = [12, 24, 32, 40 , 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512] # Table of discrete audio bit-rates
 resolution_fallback_map = { # This time-based lookup is used if smart resolution calculation fails for some reason
     15.0: 1920,
     30.0: 1600,
@@ -588,7 +589,7 @@ def process_video(input_filename, start, duration, args, full_video):
     # Calculate video bitrate by first calculating the audio size and subtracting it
     size_limit = max_size[0] if str(args.mode) == 'wsg' else max_size[1] # Look up the size cap depending on the board it's destined for
     print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
-    audio_kbps = calculate_target_audio_rate(duration, args.music_mode, args.mode)
+    audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.mode)
     audio_bitrate = '{}k'.format(audio_kbps)
     print(audio_bitrate)
     print('Calculating audio size')
@@ -722,6 +723,7 @@ if __name__ == '__main__':
         parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
+        parser.add_argument('--audio_rate', type=int, choices=audio_bitrate_table, help='Manual audio bit-rate override (kbps)')
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')

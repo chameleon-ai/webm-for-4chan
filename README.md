@@ -67,12 +67,12 @@ Manually specify arbitrary audio and video filters for ffmpeg with `--audio_filt
 Type `--help` for a complete list of commands.
 
 ## Extra Notes and Quirks
-- Audio bit-rate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`
+- Audio bit-rate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`, or specify the exact rate manually with `--audio_rate`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
 - It's tough to do one-size-fits-all automatic resolution scaling. Currently it is tuned to produce large resolutions, which can cause artifacts if the source has high motion or a lot of colors. If the output is a little too crunchy, I recommend specifying `--resolution` at one notch lower than what it automatically selected (you can find the resolution table at the top of the script)
 - If you don't want to resize it at all, use `--no_resize`
 - Dynamic resolution calculation will snap to a standard resolution size as defined in the resolution table. You can skip this with `--bypass_resolution_table`
-- The method of calculating the resolution can be altered with `--resize_mode`. All options produce similar results, but `--resize_mode cubic` usually results in lower resolutions than the default of `logarithmic`. Instead of a bit-rate based calculation, a time-based lookup table can also be used with `--resize_mode table`. Note that this doesn't alter how ffmpeg resizes the video, it only affects what target resolution is chosen.
+- The resolution calculation method can be altered with `--resize_mode`. All options produce similar results, but `--resize_mode cubic` usually results in lower resolutions than the default of `logarithmic`. Instead of a bit-rate based calculation, a time-based lookup table can also be used with `--resize_mode table`. Note that this doesn't alter how ffmpeg resizes the video, it only affects what target resolution is chosen.
 - If you want to see the calculations and ffmpeg commands without rendering the clip, use `--dry_run`
 - The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.
 - The vp9 encoder's deadline argument is set to `good` by default. Better quality, but much slower, encoding can be achieved with `--deadline best`
