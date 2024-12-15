@@ -61,7 +61,8 @@ audio_map_music_mode = { # Use high bit rate in music mode. Trying to keep the m
 }
 bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This value is subtracted to prevent file size overshoot, which tends to happen in longer files
     300.0: 0,
-    400.0: 2
+    360.0: 2,
+    400.0: 4
 }
 null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1 and certain preprocessing steps, need to output to appropriate null depending on system
 
