@@ -236,13 +236,26 @@ def find_json(output):
             print('Error processing audio normalization parameters: {}'.format(e))
     return None
 
+def get_audio_layout(input_filename : str, track : int):
+    ffprobe_cmd = ['ffprobe', '-v', 'error', '-hide_banner', '-of', 'default=noprint_wrappers=1:nokey=1', '-show_streams', '-select_streams', 'a:{}'.format(track), '-print_format', 'json', input_filename]
+    result = subprocess.run(ffprobe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        print(result.stdout)
+        raise RuntimeError('ffprobe returned error code {}'.format(result.returncode))
+    stream_info = json.loads(result.stdout)
+    if stream_info['streams'] is not None:
+        layout = stream_info['streams'][0]['channel_layout']
+        return layout
+    print(result.stdout)
+    return None
+
 # Simply renders the audio to file and gets its size.
 # This is the most precise way of knowing the final audio size and rendering this takes a fraction of the time it takes to render the video.
-# Returns a tuple containing the audio bit rate, normalization parameters if applicable, and the 5.1 surround workaround flag if applicable
+# Returns a tuple containing the audio bit rate, normalization parameters if applicable, and the surround workaround filter if applicable
 def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode, normalize):
     if str(mode) == 'wsg' or str(mode) == 'gif':
         surround_workaround = False # For working around a known bug in libopus: https://trac.ffmpeg.org/ticket/5718
-        surround_workaround_args = ['-af', "channelmap=channel_layout=5.1"]
+        surround_workaround_args = None
         output = 'temp.opus'
         if os.path.isfile(output):
             os.remove(output)
@@ -254,13 +267,28 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
         result = subprocess.run(ffmpeg_cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0 or not os.path.isfile(output):
             for line in result.stderr.splitlines():
-                # Try to rerun with 5.1 workaround
-                if 'libopus' in line and 'Invalid channel layout 5.1' in line:
-                    surround_workaround = True
+                # Try to rerun with surround sound workaround
+                if 'libopus' in line:
+                    print('Warning: ffmpeg returned status code {}. Trying surround workaround.'.format(result.returncode))
                     ffmpeg_cmd2 = ffmpeg_cmd.copy()
-                    ffmpeg_cmd2.extend(surround_workaround_args)
+                    layout = get_audio_layout(input_filename, track if track is not None else 0)
+                    if layout is None:
+                        raise RuntimeError('Could not determine channel layout.')
+                    print('Detected channel layout: {}'.format(layout))
+                    # The key is the channel layout as reported by ffprobe and the value is the appropriate channelmap layout to use in the audio filter
+                    layout_map = {
+                        '5.0(side)' : '5.0',
+                        '5.1(side)' : '5.1',
+                        '7.0(side)' : '7.0',
+                        '7.1(side)' : '7.1'
+                    }
+                    if layout not in layout_map.keys():
+                        raise RuntimeError("Could not find a workaround for channel layout '{}'".format(layout))
+                    surround_workaround_args = 'channelmap=channel_layout={}'.format(layout_map[layout])
+                    surround_workaround = True
+                    ffmpeg_cmd2.append('-af')
+                    ffmpeg_cmd2.append(surround_workaround_args)
                     ffmpeg_cmd2.append(output)
-                    print('Warning: ffmpeg returned status code {}. Trying 5.1 workaround.'.format(result.returncode))
                     if os.path.isfile(output):
                         os.remove(output)
                     result = subprocess.run(ffmpeg_cmd2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -294,26 +322,27 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 if track is not None: # Optional audio track selection
                     ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
                 if surround_workaround:
-                    ffmpeg_cmd.extend(surround_workaround_args)
+                    ffmpeg_cmd.append('-af')
+                    ffmpeg_cmd.append(surround_workaround_args)
                 ffmpeg_cmd.append(output2)
                 result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 if result.returncode == 0 and os.path.isfile(output2):
-                    return [os.path.getsize(output2), params, surround_workaround]
+                    return [os.path.getsize(output2), params, surround_workaround_args]
                 else:
                     print('Warning: Could not render normalized audio. Skipping normalization.')
                     print('Debug info:')
                     print('ffmpeg return code: {}'.format(result.returncode))
                     print('stdout: {}'.format(result.stdout))
                     print('stderr: {}'.format(result.stderr))
-                    return [os.path.getsize(output), None, surround_workaround]
+                    return [os.path.getsize(output), None, surround_workaround_args]
             else:
                 print('Warning: Could not process normalized audio. Skipping normalization.')
                 print('Debug info:')
                 print('ffmpeg return code: {}'.format(result.returncode))
                 print('stdout: {}'.format(result.stdout))
                 print('stderr: {}'.format(result.stderr))
-                return [os.path.getsize(output), None, surround_workaround]
-        return [os.path.getsize(output), None, surround_workaround]
+                return [os.path.getsize(output), None, surround_workaround_args]
+        return [os.path.getsize(output), None, surround_workaround_args]
     else: # No audio
         return [0, None, False]
 
@@ -452,7 +481,7 @@ def get_output_filename(input_filename, args):
 
 # The part where the webm is encoded
 def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, mode : ConvertMode, fast : bool, dry_run : bool):
-    ffmpeg_args = ["ffmpeg"]
+    ffmpeg_args = ["ffmpeg", '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
     if crop is not None:
@@ -671,8 +700,8 @@ def process_video(input_filename, start, duration, args, full_video):
     
     # Add miscellaneous audio filters
     extra_af = []
-    if surround_workaround:
-        extra_af.append("channelmap=channel_layout=5.1") # Tack on the 5.1 surround workaround filter if applicable
+    if surround_workaround is not None:
+        extra_af.append(surround_workaround) # Tack on the surround workaround filter if applicable
     if np is not None: # Add audio normalization parameters if they exist
         # https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg
         # https://superuser.com/questions/1312811/ffmpeg-loudnorm-2pass-in-single-line
