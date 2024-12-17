@@ -281,13 +281,15 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                     print('Detected channel layout: {}'.format(layout))
                     # The key is the channel layout as reported by ffprobe and the value is the appropriate layout to use in the audio filter.
                     # I think the bug only exists for 5.1(side) and that's the only case I've seen it, but other cases are added just to be safe.
+                    # More on possible layouts: https://ffmpeg.org/ffmpeg-utils.html#channel-layout-syntax
                     layout_map = {
                         '5.0(side)' : '5.0',
                         '5.1(side)' : '5.1',
-                        '6.0(side)' : '6.0',
-                        '6.1(side)' : '6.1',
-                        '7.0(side)' : '7.0',
-                        '7.1(side)' : '7.1'
+                        '6.0(front)' : '6.0',
+                        '6.1(front)' : '6.1',
+                        '7.0(front)' : '7.0',
+                        '7.1(wide)' : '7.1',
+                        '7.1(wide-side)' : '7.1'
                     }
                     if layout not in layout_map.keys():
                         raise RuntimeError("Could not find a workaround for channel layout '{}'".format(layout))
