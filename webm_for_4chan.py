@@ -247,7 +247,7 @@ def get_audio_layout(input_filename : str, track : int):
         print(result.stdout)
         raise RuntimeError('ffprobe returned error code {}'.format(result.returncode))
     stream_info = json.loads(result.stdout)
-    if stream_info['streams'] is not None:
+    if stream_info['streams'] is not None and len(stream_info['streams']) > 0:
         layout = stream_info['streams'][0]['channel_layout']
         return layout
     print(result.stdout)
@@ -279,7 +279,8 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                     if layout is None:
                         raise RuntimeError('Could not determine channel layout.')
                     print('Detected channel layout: {}'.format(layout))
-                    # The key is the channel layout as reported by ffprobe and the value is the appropriate channelmap layout to use in the audio filter
+                    # The key is the channel layout as reported by ffprobe and the value is the appropriate layout to use in the audio filter.
+                    # I think the bug only exists for 5.1(side) and that's the only case I've seen it, but other cases are added just to be safe.
                     layout_map = {
                         '5.0(side)' : '5.0',
                         '5.1(side)' : '5.1',
@@ -290,7 +291,9 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                     }
                     if layout not in layout_map.keys():
                         raise RuntimeError("Could not find a workaround for channel layout '{}'".format(layout))
-                    surround_workaround_args = 'channelmap=channel_layout={}'.format(layout_map[layout])
+                    # Using a slightly modified form of the recommended solution from https://trac.ffmpeg.org/ticket/5718#comment:11
+                    # as well as the technique to identify and substitute appropriate tracks from https://trac.ffmpeg.org/ticket/5718#comment:21
+                    surround_workaround_args = 'aformat=channel_layouts={}'.format(layout_map[layout])
                     surround_workaround = True
                     ffmpeg_cmd2.append('-af')
                     ffmpeg_cmd2.append(surround_workaround_args)
