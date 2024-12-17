@@ -191,18 +191,22 @@ def calculate_target_fps(input_filename, duration):
             frame_rate = fps_map[key]
             break
     # Get input frame rate
-    result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", input_filename], stdout=subprocess.PIPE, text=True)
-    if result.returncode != 0:
-        print(result.stdout)
-        print('ffprobe returned error code {}'.format(result.returncode))
-        print('Error getting input fps. Using no input fps assumptions.')
-        return frame_rate
-    # Outputs the frame rate as a precise fraction. Have to convert to decimal.
-    source_fps_fractional = result.stdout.split('/')
-    source_fps = round(float(source_fps_fractional[0]) / float(source_fps_fractional[1]), 2)
-    # If source frame rate is already fine, return None to signal no fps filter necessary
-    if source_fps <= frame_rate:
-        return None
+    try:
+        result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", input_filename], stdout=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            print(result.stdout)
+            print('ffprobe returned error code {}'.format(result.returncode))
+            print('Error getting input fps. Using no input fps assumptions.')
+            return frame_rate
+        # Outputs the frame rate as a precise fraction. Have to convert to decimal.
+        source_fps_fractional = result.stdout.split('/')
+        source_fps = round(float(source_fps_fractional[0]) / float(source_fps_fractional[1]), 2)
+        # If source frame rate is already fine, return None to signal no fps filter necessary
+        if source_fps <= frame_rate:
+            return None
+    except Exception as e:
+        print(e)
+        print('Error reading source fps. Falling back to time-based table.')
     return frame_rate # Return calculated fps otherwise
 
 # Use audio lookup table
@@ -279,6 +283,8 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                     layout_map = {
                         '5.0(side)' : '5.0',
                         '5.1(side)' : '5.1',
+                        '6.0(side)' : '6.0',
+                        '6.1(side)' : '6.1',
                         '7.0(side)' : '7.0',
                         '7.1(side)' : '7.1'
                     }
