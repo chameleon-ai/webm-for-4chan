@@ -14,6 +14,7 @@ Developed on Linux, probably works on Windows.
 - Subtitle burn-in
 - Skip black frames at the start of a video
 - Music mode optimized for songs
+- Combine static image with audio
 
 ## How Does it Work?
 It's a simple wrapper for ffmpeg. A precise file size is determined by first rendering the audio, then calculating a target video bit-rate in kbps using the remaining space not taken up by the audio. Then, using 2-pass encoding, it's up to ffmpeg to hit the target size exactly. It's usually very good at hitting the target size without going over, but it's not perfect.
@@ -27,10 +28,13 @@ Make sure ffmpeg and ffprobe are accessible from your path, that's it.
 If the video is already clipped and ready to be converted, simply:\
 `python webm_for_4chan.py input.mp4`
 
+Combine a static image (or animated gif) with audio:\
+`python webm_for_4chan.py image.png song.mp3`
+
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
 Use `--output` to specify a custom file name.
 
-Clipping the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
+Clip the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
 `python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`
 
 Or specify a relative 2 minute duration:\
@@ -68,7 +72,9 @@ Type `--help` for a complete list of commands.
 
 ## Extra Notes and Quirks
 - Audio bit-rate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`, or specify the exact rate manually with `--audio_rate`
+- Image + audio combine mode behaves as if `--music_mode` is set. Audio bit-rate can still be set with `--audio_rate`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
+- Resolution remains unchanged in image + audio combine mode. It can still be manually changed with `--resolution`
 - It's tough to do one-size-fits-all automatic resolution scaling. Currently it is tuned to produce large resolutions, which can cause artifacts if the source has high motion or a lot of colors. If the output is a little too crunchy, I recommend specifying `--resolution` at one notch lower than what it automatically selected (you can find the resolution table at the top of the script)
 - If you don't want to resize it at all, use `--no_resize`
 - Dynamic resolution calculation will snap to a standard resolution size as defined in the resolution table. You can skip this with `--bypass_resolution_table`

@@ -10,6 +10,7 @@ import datetime
 from enum import Enum
 import json
 import math
+import mimetypes
 import os
 import platform
 import subprocess
@@ -730,6 +731,141 @@ def process_video(input_filename, start, duration, args, full_video):
             print('WARNING: Output size exceeded target maximum {}. You should rerun with --bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
     return output
 
+# Figures out which input is image and which is audio. Returns (image, audio), which may be None if image or audio couldn't be found.
+def get_image_audio_inputs(args : list):
+    mime_types = [ mimetypes.guess_type(x) + (x,) for x in args ]
+    image = None
+    audio = None
+    for type, encoding, filename in mime_types:
+        if type is None:
+           raise RuntimeError("Unknown mime type for input file '{}'".format(filename))
+        # Possible mime types: https://www.iana.org/assignments/media-types/media-types.xhtml
+        category = type.split('/')[0]
+        if category == 'image':
+            image = filename
+        elif category == 'audio':
+            audio = filename
+        else:
+            raise RuntimeError("Unsupported mime type '{}' for input file '{}'".format(type, encoding, filename))
+    return image, audio
+
+# Special mode for combining a static image (or animated gif) with an audio file
+def image_audio_combine(input_image, input_audio, args):
+    if args.duration is not None or args.start != '0.0' or args.end is not None:
+        print('Warning: start, end, and duration are not used in image + audio mode. Parameters will be ignored.')
+    if str(args.mode) == 'other':
+        print("Warning: Mode 'other' is not supported in audio combine mode. Mode will be treated as 'gif'")
+        args.mode = ConvertMode.gif
+    output = get_output_filename(input_audio, args)
+    
+    audio_subtype = mimetypes.guess_type(input_audio)[0].split('/')[-1]
+    duration = get_video_duration(input_audio, 0.0)
+    print('Audio duration: {}'.format(duration))
+
+    size_limit = max_size[0] if str(args.mode) == 'wsg' else max_size[1] # Look up the size cap depending on the board it's destined for
+    print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
+    audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, True, args.mode)
+    audio_bitrate = '{}k'.format(audio_kbps)
+    print(audio_bitrate)
+
+    print('Calculating audio size')
+    audio_size = 0
+    audio_copy = False
+    # Can copy audio if it's already opus
+    if (audio_subtype == 'ogg') and args.normalize is None:
+        audio_copy = True
+        audio_size = os.path.getsize(input_audio)
+    else:
+        audio_size, np, surround_workaround = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.mode, args.normalize)
+    print('Audio size: {}kB'.format(int(audio_size/1024)))
+    adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
+    size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
+    target_kbps = min((int)(size_kb / duration.total_seconds()), max_bitrate) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
+    compensated_kbps = target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation) # Subtract the compensation factor if specified
+    video_bitrate = '{}k'.format(compensated_kbps)
+    
+    ffmpeg_args = ["ffmpeg", '-hide_banner']
+
+    # Image / video input
+    image_subtype = mimetypes.guess_type(input_image)[0].split('/')[-1]
+    if image_subtype == 'gif': # Gifs need different arguments than static images
+        ffmpeg_args.extend(['-ignore_loop', '0'])
+    else:
+        ffmpeg_args.extend(['-framerate', '1', '-loop', '1']) # 1 fps, -loop 1 = loop frames
+    ffmpeg_args.extend(['-i', input_image])
+
+    # Audio input
+    ffmpeg_args.extend(['-i', input_audio])
+    if audio_copy:
+        print('Opus audio detected. Using copy mode.')
+        ffmpeg_args.extend(['-c:a', 'copy'])
+    else:
+        ffmpeg_args.extend(["-c:a", "libopus", '-b:a', audio_bitrate])
+
+    # Output
+    vp9_args = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
+    ffmpeg_args.extend(vp9_args)
+    ffmpeg_args.extend(["-b:v", video_bitrate])
+
+    # Video filters
+    vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
+    if args.crop is not None:
+        vf_args += args.crop
+    if args.resolution is not None:
+        if vf_args != '':
+            vf_args += ',' # Tack on to other args if string isn't empty
+        # Constrain to a maximum of the target resolution, horizontal or vertical, while preserving the original aspect ratio
+        vf_args += "scale='min({},iw)':'min({},ih):force_original_aspect_ratio=decrease'".format(args.resolution,args.resolution)
+    if args.video_filter is not None:
+        if vf_args != '':
+            vf_args += ','
+        vf_args += args.video_filter
+    if vf_args != '': # Add video filter if there are any arguments
+        ffmpeg_args.extend(["-vf", vf_args])
+    
+    # Audio filters
+    extra_af = []
+    if surround_workaround is not None:
+        extra_af.append(surround_workaround) # Tack on the surround workaround filter if applicable
+    if np is not None: # Add audio normalization parameters if they exist
+        extra_af.append("loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}".format(np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh']))
+    if args.audio_filter is not None:
+        extra_af.append(args.audio_filter)
+    af_args = ''
+    for filter in extra_af: # Apply miscellaneous filters
+        if af_args != '':
+            af_args += ',' # Tack on to other args if string isn't empty
+        af_args += filter
+    if af_args != '':
+        ffmpeg_args.append('-af')
+        ffmpeg_args.append(af_args)
+    
+    # Finalize with the output file itself
+    # Need to specify the audio's duration in order to make the output length exactly match,
+    # the -t method is more reliable than the -shortest flag, which tends to overshoot the length
+    ffmpeg_args.extend(['-t', str(duration), output]) 
+
+    print('Target bitrate: {}'.format(video_bitrate))
+    print(' '.join(ffmpeg_args))
+    if not args.dry_run:
+        # Use popen so we can pend on completion
+        pope = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        for line in iter(pope.stderr.readline, ""):
+            if 'frame=' in line:
+                print('\r' + line.strip(), end='')
+            else:
+                print(line, end='')
+        pope.stderr.close()
+        pope.wait()
+        if pope.returncode != 0:
+            raise RuntimeError('ffmpeg returned code {}'.format(pope.returncode))
+    if os.path.isfile(output):
+        out_size = os.path.getsize(output)
+        print('output file size: {} KB'.format(int(out_size/1024)))
+        if out_size > size_limit:
+            print('WARNING: Output size exceeded target maximum {}. You should rerun with --bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
+    return output
+
 def cleanup():
     for filename in ['temp.opus', 'temp.normalized.opus', 'temp.ass', 'ffmpeg2pass-0.log']:
         if os.path.isfile(filename):
@@ -779,6 +915,21 @@ if __name__ == '__main__':
         if args.input is not None: # Input was explicitly specified
             input_filename = args.input
         elif len(unknown_args) > 0: # Input was specified as an unknown argument
+            if len(unknown_args) == 2: # Try to detect music + static image assembly mode
+                print("2 inputs specified. Using image + audio combine mode.")
+                image_input, audio_input = get_image_audio_inputs(unknown_args)
+                if image_input is None:
+                    raise RuntimeError("Couldn't identify image source from input files.")
+                if audio_input is None:
+                    raise RuntimeError("Couldn't identify audio source from input files.")
+                result = image_audio_combine(image_input, audio_input, args)
+                print('output file: "{}"'.format(result))
+                if not args.dry_run:
+                    cleanup()
+                exit(0)
+            elif len(unknown_args) > 2:
+                print("Too many input arguments. Please specify only 1 or 2 inputs.")
+                exit(0)
             input_filename = unknown_args[-1]
         else:
             parser.print_help() # Can't identify the input file
