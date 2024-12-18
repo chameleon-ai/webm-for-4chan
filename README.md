@@ -74,7 +74,8 @@ Type `--help` for a complete list of commands.
 - Audio bit-rate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`, or specify the exact rate manually with `--audio_rate`
 - Image + audio combine mode behaves as if in `--music_mode`. You can still manually specify `--audio_rate`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
-- Resolution remains unchanged in image + audio combine mode. It can still be overridden with `--resolution`
+- By default, resolution remains unchanged in image + audio combine mode. You can still manually specify with `--resolution`
+- Clipping (`-s`, `-e`, `-d`), `--auto_crop`, and subtitle burn-in are disabled in image + audio combine mode. You can still `--normalize` and apply arbitrary audio and video filters (`-a`, `-v`).
 - It's tough to do one-size-fits-all automatic resolution scaling. Currently it is tuned to produce large resolutions, which can cause artifacts if the source has high motion or a lot of colors. If the output is a little too crunchy, I recommend specifying `--resolution` at one notch lower than what it automatically selected (you can find the resolution table at the top of the script)
 - If you don't want to resize it at all, use `--no_resize`
 - Dynamic resolution calculation will snap to a standard resolution size as defined in the resolution table. You can skip this with `--bypass_resolution_table`
