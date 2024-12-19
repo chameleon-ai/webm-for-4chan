@@ -241,6 +241,7 @@ def find_json(output):
             print('Error processing audio normalization parameters: {}'.format(e))
     return None
 
+# Return a tuple containing the stream layout and a flag that is True of no audio stream was detected
 def get_audio_layout(input_filename : str, track : int):
     ffprobe_cmd = ['ffprobe', '-v', 'error', '-hide_banner', '-of', 'default=noprint_wrappers=1:nokey=1', '-show_streams', '-select_streams', 'a:{}'.format(track), '-print_format', 'json', input_filename]
     result = subprocess.run(ffprobe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -248,15 +249,18 @@ def get_audio_layout(input_filename : str, track : int):
         print(result.stdout)
         raise RuntimeError('ffprobe returned error code {}'.format(result.returncode))
     stream_info = json.loads(result.stdout)
-    if stream_info['streams'] is not None and len(stream_info['streams']) > 0:
-        layout = stream_info['streams'][0]['channel_layout']
-        return layout
+    if stream_info['streams'] is not None:
+        if len(stream_info['streams']) > 0:
+            layout = stream_info['streams'][0]['channel_layout']
+            return layout, False
+        else:
+            return None, True
     print(result.stdout)
-    return None
+    return None, False
 
 # Simply renders the audio to file and gets its size.
 # This is the most precise way of knowing the final audio size and rendering this takes a fraction of the time it takes to render the video.
-# Returns a tuple containing the audio bit rate, normalization parameters if applicable, and the surround workaround filter if applicable
+# Returns a tuple containing the audio bit rate, normalization parameters if applicable, the surround workaround filter if applicable, and a special flag if no audio streams were found
 def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode, normalize):
     if str(mode) == 'wsg' or str(mode) == 'gif':
         surround_workaround = False # For working around a known bug in libopus: https://trac.ffmpeg.org/ticket/5718
@@ -274,9 +278,13 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
             for line in result.stderr.splitlines():
                 # Try to rerun with surround sound workaround
                 if 'libopus' in line:
-                    print('Warning: ffmpeg returned status code {}. Trying surround workaround.'.format(result.returncode))
                     ffmpeg_cmd2 = ffmpeg_cmd.copy()
-                    layout = get_audio_layout(input_filename, track if track is not None else 0)
+                    layout, no_audio = get_audio_layout(input_filename, track if track is not None else 0)
+                    if no_audio:
+                        print('ffprobe did not detect any audio streams.')
+                        return [0, None, False, True]
+                    else:
+                        print('Warning: ffmpeg returned status code {}. Trying surround workaround.'.format(result.returncode))
                     if layout is None:
                         raise RuntimeError('Could not determine channel layout.')
                     print('Detected channel layout: {}'.format(layout))
@@ -339,24 +347,24 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 ffmpeg_cmd.append(output2)
                 result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 if result.returncode == 0 and os.path.isfile(output2):
-                    return [os.path.getsize(output2), params, surround_workaround_args]
+                    return [os.path.getsize(output2), params, surround_workaround_args, False]
                 else:
                     print('Warning: Could not render normalized audio. Skipping normalization.')
                     print('Debug info:')
                     print('ffmpeg return code: {}'.format(result.returncode))
                     print('stdout: {}'.format(result.stdout))
                     print('stderr: {}'.format(result.stderr))
-                    return [os.path.getsize(output), None, surround_workaround_args]
+                    return [os.path.getsize(output), None, surround_workaround_args, False]
             else:
                 print('Warning: Could not process normalized audio. Skipping normalization.')
                 print('Debug info:')
                 print('ffmpeg return code: {}'.format(result.returncode))
                 print('stdout: {}'.format(result.stdout))
                 print('stderr: {}'.format(result.stderr))
-                return [os.path.getsize(output), None, surround_workaround_args]
-        return [os.path.getsize(output), None, surround_workaround_args]
+                return [os.path.getsize(output), None, surround_workaround_args, False]
+        return [os.path.getsize(output), None, surround_workaround_args, False]
     else: # No audio
-        return [0, None, False]
+        return [0, None, surround_workaround_args, True]
 
 # Attempt to compensate for calculated bitrate to prevent file size overshoot
 # User can also manually specify additional compensation through the -b argument
@@ -492,7 +500,7 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, mode : ConvertMode, fast : bool, dry_run : bool):
+def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, no_audio : bool, mode : ConvertMode, fast : bool, dry_run : bool):
     ffmpeg_args = ["ffmpeg", '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
@@ -552,7 +560,7 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
     pass1.extend(["-an", "-f", "null", null_output]) # Pass 1 doesn't output to file
 
     # Audio options. wsg/gif allow audio, else omit audio
-    if str(mode) == 'wsg' or str(mode) == 'gif':
+    if (str(mode) == 'wsg' or str(mode) == 'gif') and not no_audio:
         if track is not None: # Optional track selection
             pass2.extend(['-map', '0:v:0', '-map', '0:a:{}'.format(track)])
         else: # When testing multi-track videos, leaving this argument out causes buggy time codes when clipping for some unknown reason
@@ -636,7 +644,7 @@ def process_video(input_filename, start, duration, args, full_video):
     print(audio_bitrate)
     print('Calculating audio size')
     # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
-    audio_size, np, surround_workaround = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, args.normalize)
+    audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, args.normalize)
     print('Audio size: {}kB'.format(int(audio_size/1024)))
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
@@ -722,7 +730,7 @@ def process_video(input_filename, start, duration, args, full_video):
         extra_af.append(args.audio_filter)
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, args.deadline, not args.no_mt, crop, extra_vf, extra_af, subs, audio_track, full_video, args.mode, args.fast, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, args.deadline, not args.no_mt, crop, extra_vf, extra_af, subs, audio_track, full_video, no_audio, args.mode, args.fast, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -776,7 +784,9 @@ def image_audio_combine(input_image, input_audio, args):
         audio_copy = True
         audio_size = os.path.getsize(input_audio)
     else:
-        audio_size, np, surround_workaround = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.mode, args.normalize)
+        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.mode, args.normalize)
+        if no_audio:
+            raise RuntimeError('Unable to complete image + audio combine mode. No audio stream found.')
     print('Audio size: {}kB'.format(int(audio_size/1024)))
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
