@@ -508,27 +508,11 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, no_audio : bool, mode : BoardMode, fast : bool, dry_run : bool):
+def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mode : BoardMode, dry_run : bool):
     ffmpeg_args = ["ffmpeg", '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
-    vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
-    if crop is not None:
-        vf_args += crop
-    if resolution is not None:
-        if vf_args != '':
-            vf_args += ',' # Tack on to other args if string isn't empty
-        # Constrain to a maximum of the target resolution, horizontal or vertical, while preserving the original aspect ratio
-        vf_args += "scale='min({},iw)':'min({},ih):force_original_aspect_ratio=decrease'".format(resolution,resolution)
-    print('Calculating fps: ', end='')
-    fps = calculate_target_fps(input, duration) # Look up the target fps
-    if fps is not None:
-        print(fps)
-        if vf_args != '':
-            vf_args += ',' # Tack on to other args if string isn't empty
-        vf_args += 'fps={}'.format(fps)
-    else:
-        print('same as source')
-    for filter in extra_vf:
+    vf_args = '' # The video filter arguments
+    for filter in video_filters:
         if vf_args != '':
             vf_args += ',' # Tack on to other args if string isn't empty
         vf_args += filter
@@ -551,14 +535,7 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
 
     if vf_args != '': # Add video filter if there are any arguments
         ffmpeg_args.extend(["-vf", vf_args])
-    print('Target bitrate: {}'.format(video_bitrate))
-    vp9_args = ["-c:v", "libvpx-vp9", "-deadline", 'good' if fast else deadline]
-    ffmpeg_args.extend(vp9_args)
-    if fast:
-        ffmpeg_args.extend(["-cpu-used", "5"]) # By default, this is 0, 5 means worst quality but fastest
-    if mt: # Enable multithreading
-        ffmpeg_args.extend(["-row-mt", "1"])
-    ffmpeg_args.extend(["-b:v", video_bitrate, "-async", "1", "-vsync", "2"])
+    ffmpeg_args.extend(video_codec)
 
     # The constructed ffmpeg commands
     pass1 = ffmpeg_args
@@ -578,14 +555,14 @@ def encode_video(input, output, start, duration, video_bitrate, resolution, audi
                 print('Multiple audio tracks detected, selecting track 0.')
                 pass2.extend(['-map', '0:v:0', '-map', '0:a:0'])
         af_args = ''
-        for filter in extra_af: # Apply miscellaneous filters
+        for filter in audio_filters: # Apply miscellaneous filters
             if af_args != '':
                 af_args += ',' # Tack on to other args if string isn't empty
             af_args += filter
         if af_args != '':
             pass2.append('-af')
             pass2.append(af_args)
-        pass2.extend(["-c:a", "libopus", '-b:a', audio_bitrate])
+        pass2.extend(audio_codec)
     else:
         pass2.extend(["-an"]) # No audio
     pass2.append(output)
@@ -729,24 +706,48 @@ def process_video(input_filename, start, duration, args, full_video):
     else:
         print(resolution)
     
-    # Add miscellaneous video filters
-    extra_vf = []
-    if args.video_filter is not None:
-        extra_vf.append(args.video_filter)
+    print('Calculating fps: ', end='')
+    fps = args.fps if args.fps is not None else calculate_target_fps(input_filename, duration) # Look up the target fps
+    if fps is not None:
+        print(fps)
+    else:
+        print('same as source')
+
+    # Add video filter arguments
+    video_filters = []
+    if crop is not None:
+        video_filters.append(crop) # Crop should precede scale filter, since it's assumed that crop params correspond to the original input
+    if resolution is not None:
+        # Constrain to a maximum of the target resolution, horizontal or vertical, while preserving the original aspect ratio
+        video_filters.append("scale='min({},iw)':'min({},ih):force_original_aspect_ratio=decrease'".format(resolution,resolution))
+    if fps is not None:
+        video_filters.append('fps={}'.format(fps))
+    if args.video_filter is not None: # Arbitrary user-supplied filters
+        video_filters.append(args.video_filter)
     
-    # Add miscellaneous audio filters
-    extra_af = []
+    # Add audio filters
+    audio_filters = []
     if surround_workaround is not None:
-        extra_af.append(surround_workaround) # Tack on the surround workaround filter if applicable
+        audio_filters.append(surround_workaround) # Tack on the surround workaround filter if applicable
     if np is not None: # Add audio normalization parameters if they exist
         # https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg
         # https://superuser.com/questions/1312811/ffmpeg-loudnorm-2pass-in-single-line
-        extra_af.append("loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}".format(np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh']))
+        audio_filters.append("loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}".format(np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh']))
     if args.audio_filter is not None:
-        extra_af.append(args.audio_filter)
+        audio_filters.append(args.audio_filter)
+    
+    video_codec = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
+    if args.fast:
+        video_codec.extend(["-cpu-used", "5"]) # By default, this is 0, 5 means worst quality but fastest
+    if not args.no_mt: # Enable multithreading
+        video_codec.extend(["-row-mt", "1"])
+    print('Target bitrate: {}'.format(video_bitrate))
+    video_codec.extend(["-b:v", video_bitrate, "-async", "1", "-vsync", "2"])
+    
+    audio_codec = ["-an"] if no_audio else ["-c:a", "libopus", '-b:a', audio_bitrate]
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, args.deadline, not args.no_mt, crop, extra_vf, extra_af, subs, audio_track, full_video, no_audio, args.board, args.fast, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.board, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -930,6 +931,7 @@ if __name__ == '__main__':
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
+        parser.add_argument('--fps', type=float, help='Manual fps override.')
         parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
         parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
         parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")

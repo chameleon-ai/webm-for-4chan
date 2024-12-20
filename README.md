@@ -75,6 +75,7 @@ Type `--help` for a complete list of commands.
 ## Extra Notes and Quirks
 - Audio bit-rate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`, or specify the exact rate manually with `--audio_rate`
 - Image + audio combine mode behaves as if in `--music_mode`. You can still manually specify `--audio_rate`
+- Fps cap is automatically reduced for long clips. You can manually specify with `--fps`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
 - By default, resolution remains unchanged in image + audio combine mode. You can still manually specify with `--resolution`
 - Clipping (`-s`, `-e`, `-d`), `--auto_crop`, and subtitle burn-in are disabled in image + audio combine mode. You can still `--normalize` and apply arbitrary audio and video filters (`-a`, `-v`).
