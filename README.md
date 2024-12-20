@@ -1,6 +1,6 @@
 # webm-for-4chan
 Webm converter optimized for 4chan.\
-Designed for 6MB limit (/wsg/), but 4MB with sound (/gif/) and 4MB without sound are supported.\
+Targets 6MB with sound (/wsg/) by default, but 4MB with sound (/gif/) and 4MB without sound are supported.\
 Developed on Linux, probably works on Windows.
 
 ## Features
@@ -55,11 +55,13 @@ Same as above, but select audio and subs by index instead of language:\
 Use external subtitles:\
 `python webm_for_4chan.py input.mkv --sub_file "input.en.ssa"`
 
-By default, the script renders up to 6MiB with sound.\
-To render up to 4MiB with sound, use `--mode gif`\
-To render up to 4MiB with no sound, use `--mode other`
+By default, the script renders up to 6MiB, 400 seconds with sound for wsg.\
+To set the size limit to 4MiB, 120 seconds with sound, use `--board gif`\
+To set the size limit to 4MiB, 120 seconds with no sound, use `--board other`\
+Remove sound altogether with `--no_audio`\
+Manually set the file size limit, in MiB, with `--size`, i.e. `--size 5` will target a 5 MiB file.
 
-Enable audio volume normalization with `--normalize`\
+Enable audio volume normalization with `--normalize` or `-n`\
 Skip black frames at the start of the video with `--blackframe`\
 Crop using automatic edge detection with `--auto_crop`\
 Crop using manually specified boundaries with `--crop`\

@@ -67,6 +67,14 @@ bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This val
 }
 null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1 and certain preprocessing steps, need to output to appropriate null depending on system
 
+# Determine size limit in bytes
+def get_size_limit(args):
+    # Manual size override
+    if args.size is not None:
+        return args.size * 1024 * 1024
+    else:
+        return max_size[0] if str(args.board) == 'wsg' else max_size[1] # Look up the size cap depending on the board it's destined for
+
 # This is only called if you don't specify a duration or end time. Uses ffprobe to find out how long the input is.
 def get_video_duration(input_filename, start_time : float):
     # https://superuser.com/questions/650291/how-to-get-video-duration-in-seconds
@@ -97,7 +105,7 @@ def parsetime(ts_input):
             return datetime.timedelta(seconds=duration.tm_sec, milliseconds=ms)
 
 # Define the 3 different options for 4chan
-class ConvertMode(Enum):
+class BoardMode(Enum):
     wsg = 'wsg'
     gif = 'gif'
     other = 'other'
@@ -211,7 +219,7 @@ def calculate_target_fps(input_filename, duration):
     return frame_rate # Return calculated fps otherwise
 
 # Use audio lookup table
-def calculate_target_audio_rate(duration, music_mode, mode : ConvertMode):
+def calculate_target_audio_rate(duration, music_mode, mode : BoardMode):
     audiomap = None
     if music_mode:
         audiomap = audio_map_music_mode
@@ -364,7 +372,7 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 return [os.path.getsize(output), None, surround_workaround_args, False]
         return [os.path.getsize(output), None, surround_workaround_args, False]
     else: # No audio
-        return [0, None, surround_workaround_args, True]
+        return [0, None, None, True]
 
 # Attempt to compensate for calculated bitrate to prevent file size overshoot
 # User can also manually specify additional compensation through the -b argument
@@ -500,7 +508,7 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, no_audio : bool, mode : ConvertMode, fast : bool, dry_run : bool):
+def encode_video(input, output, start, duration, video_bitrate, resolution, audio_bitrate, deadline : str, mt : bool, crop, extra_vf : list, extra_af : list, subtitles, track, full_video : bool, no_audio : bool, mode : BoardMode, fast : bool, dry_run : bool):
     ffmpeg_args = ["ffmpeg", '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
@@ -637,15 +645,23 @@ def process_video(input_filename, start, duration, args, full_video):
             print('Warning: Audio language {} not found, using default audio track.'.format(args.audio_lang))
 
     # Calculate video bitrate by first calculating the audio size and subtracting it
-    size_limit = max_size[0] if str(args.mode) == 'wsg' else max_size[1] # Look up the size cap depending on the board it's destined for
-    print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
-    audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.mode)
-    audio_bitrate = '{}k'.format(audio_kbps)
-    print(audio_bitrate)
-    print('Calculating audio size')
-    # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
-    audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.mode, args.normalize)
-    print('Audio size: {}kB'.format(int(audio_size/1024)))
+    no_audio = False
+    audio_size = 0
+    surround_workaround = None
+    np = None
+    audio_bitrate = '96k'
+    if args.no_audio or str(args.board) == 'other':
+        no_audio = True
+    else:
+        print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
+        audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.board)
+        audio_bitrate = '{}k'.format(audio_kbps)
+        print(audio_bitrate)
+        print('Calculating audio size')
+        # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
+        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.board, args.normalize)
+        print('Audio size: {}kB'.format(int(audio_size/1024)))
+    size_limit = get_size_limit(args)
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
     size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
     target_kbps = min((int)(size_kb / duration.total_seconds()), max_bitrate) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
@@ -730,7 +746,7 @@ def process_video(input_filename, start, duration, args, full_video):
         extra_af.append(args.audio_filter)
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, args.deadline, not args.no_mt, crop, extra_vf, extra_af, subs, audio_track, full_video, no_audio, args.mode, args.fast, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_bitrate, resolution, audio_bitrate, args.deadline, not args.no_mt, crop, extra_vf, extra_af, subs, audio_track, full_video, no_audio, args.board, args.fast, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -761,18 +777,20 @@ def get_image_audio_inputs(args : list):
 def image_audio_combine(input_image, input_audio, args):
     if args.duration is not None or args.start != '0.0' or args.end is not None:
         print('Warning: start, end, and duration are not used in image + audio mode. Parameters will be ignored.')
-    if str(args.mode) == 'other':
+    if str(args.board) == 'other':
         print("Warning: Mode 'other' is not supported in audio combine mode. Mode will be treated as 'gif'")
-        args.mode = ConvertMode.gif
+        args.board = BoardMode.gif
+    if args.no_audio:
+        print("Warning: --no_audio flag will be ignored for image + audio combine mode.")
     output = get_output_filename(input_audio, args)
     
     audio_subtype = mimetypes.guess_type(input_audio)[0].split('/')[-1]
     duration = get_video_duration(input_audio, 0.0)
     print('Audio duration: {}'.format(duration))
 
-    size_limit = max_size[0] if str(args.mode) == 'wsg' else max_size[1] # Look up the size cap depending on the board it's destined for
+    size_limit = get_size_limit(args)
     print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
-    audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, True, args.mode)
+    audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, True, args.board)
     audio_bitrate = '{}k'.format(audio_kbps)
     print(audio_bitrate)
 
@@ -784,7 +802,7 @@ def image_audio_combine(input_image, input_audio, args):
         audio_copy = True
         audio_size = os.path.getsize(input_audio)
     else:
-        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.mode, args.normalize)
+        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, args.normalize)
         if no_audio:
             raise RuntimeError('Unable to complete image + audio combine mode. No audio stream found.')
     print('Audio size: {}kB'.format(int(audio_size/1024)))
@@ -818,12 +836,15 @@ def image_audio_combine(input_image, input_audio, args):
     ffmpeg_args.extend(["-b:v", video_bitrate])
 
     # Video filters
-    vf_args = '' # The video filter arguments. Size limit, fps, burn-in subtitles, etc.
+    # The decimate filter drops duplicated frames, which increases efficiency when using a static image: https://ffmpeg.org/ffmpeg-filters.html#decimate-1
+    vf_args = 'decimate' 
     if args.crop is not None:
+        if vf_args != '':
+            vf_args += ',' # Tack on to other args if string isn't empty
         vf_args += args.crop
     if args.resolution is not None:
         if vf_args != '':
-            vf_args += ',' # Tack on to other args if string isn't empty
+            vf_args += ','
         # Constrain to a maximum of the target resolution, horizontal or vertical, while preserving the original aspect ratio
         vf_args += "scale='min({},iw)':'min({},ih):force_original_aspect_ratio=decrease'".format(args.resolution,args.resolution)
     if args.video_filter is not None:
@@ -887,41 +908,45 @@ if __name__ == '__main__':
             prog='4chan Webm Converter',
             description='Attempts to fit video clips into the 4chan size limit',
             epilog='Default behavior is to process the entire video. Specify --start and either --end or --duration to make a clip. Note that input name can be specified either with -i or by just throwing it in as a misc. argument')
-        parser.add_argument('-m', '--mode', type=ConvertMode, default='wsg', choices=list(ConvertMode), help='Webm convert mode. wsg=6MB with sound, gif=4MB with sound, other=4MB no sound')
         parser.add_argument('-i', '--input', type=str, help='Input file to process')
         parser.add_argument('-o', '--output', type=str, help='Output File name (default output is named after the input prepended with "_1_")')
         parser.add_argument('-s', '--start', type=str, default='0.0', help='Start timestamp, i.e. 0:30:5.125')
         parser.add_argument('-e', '--end', type=str, help='End timestamp, i.e. 0:35:0.000')
         parser.add_argument('-d', '--duration', type=str, help='Clip duration (maximum {} seconds in wsg mode and {} seconds otherwise), i.e. 1:15.000'.format(max_duration[0], max_duration[1]))
         parser.add_argument('-b', '--bitrate_compensation', default=0, type=int, help='Fixed value to subtract from target bitrate (kbps). Use if your output size is overshooting')
-        parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")
-        parser.add_argument('-c', '--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('-n', '--normalize', action='store_true', help='Enable 2-pass audio normalization.')
-        parser.add_argument('-v', '--video_filter', type=str, help="Video filter arguments. This string is passed directly to the -vf chain.")
+        parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")
         parser.add_argument('-a', '--audio_filter', type=str, help="Audio filter arguments. This string is passed directly to the -af chain.")
-        parser.add_argument('--auto_crop', action='store_true', help="Automatic crop using cropdetect.")
-        parser.add_argument('--blackframe', action='store_true', help="Skip initial black frames using a first pass with blackframe filter.")
-        parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")
-        parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
-        parser.add_argument('--auto_subs', action='store_true', help="Automatically burn-in the first embedded subtitles, if they exist")
-        parser.add_argument('--sub_index', type=int, help="Subtitle index to burn-in (use --list_subs if you don't know the index)")
-        parser.add_argument('--sub_lang', type=str, help="Subtitle language to burn-in, must be an exact match with what is listed in the file (use --list_subs if you don't know the language)")
-        parser.add_argument('--sub_file', type=str, help='Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs)')
-        parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
+        parser.add_argument('-v', '--video_filter', type=str, help="Video filter arguments. This string is passed directly to the -vf chain.")
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--audio_rate', type=int, choices=audio_bitrate_table, help='Manual audio bit-rate override (kbps)')
-        parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
-        parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
+        parser.add_argument('--auto_crop', action='store_true', help="Automatic crop using cropdetect.")
+        parser.add_argument('--auto_subs', action='store_true', help="Automatically burn-in the first embedded subtitles, if they exist")
+        parser.add_argument('--blackframe', action='store_true', help="Skip initial black frames using a first pass with blackframe filter.")
+        parser.add_argument('--board', '--mode', dest='board', type=BoardMode, default='wsg', choices=list(BoardMode), help='Webm convert mode. wsg=6MB with sound, gif=4MB with sound, other=4MB no sound')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
-        parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
-        parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
+        parser.add_argument('--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
+        parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
+        parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
+        parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
+        parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")
+        parser.add_argument('--no_audio', action='store_true', help='Drop audio if it exists')
+        parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
+        parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
+        parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
+        parser.add_argument('--size', '--limit', dest='size', type=float, help='Target file size limit, in MiB. Default is 6 if board is wsg, and 4 otherwise.')
+        parser.add_argument('--sub_index', type=int, help="Subtitle index to burn-in (use --list_subs if you don't know the index)")
+        parser.add_argument('--sub_lang', type=str, help="Subtitle language to burn-in, must be an exact match with what is listed in the file (use --list_subs if you don't know the language)")
+        parser.add_argument('--sub_file', type=str, help='Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs)')
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()
         input_filename = None
+        if args.size is not None and args.size > 6.0:
+            print("Warning: Manual size limit is larger than 4chan's supported size of 6MiB!")
         if args.input is not None: # Input was explicitly specified
             input_filename = args.input
         elif len(unknown_args) > 0: # Input was specified as an unknown argument
@@ -980,7 +1005,7 @@ if __name__ == '__main__':
                     full_video = True
             print('duration:', duration)
             duration_sec = duration.total_seconds()
-            duration_limit = max_duration[0] if str(args.mode) == 'wsg' else max_duration[1]
+            duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
             if duration_sec > duration_limit:
                 raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
             result = process_video(input_filename, start_time, duration, args, full_video)
