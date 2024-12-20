@@ -1,6 +1,7 @@
 # webm-for-4chan
 Webm converter optimized for 4chan.\
 Targets 6MB with sound (/wsg/) by default, but 4MB with sound (/gif/) and 4MB without sound are supported.\
+Makes .webm (vp9/opus) by default, but .mp4 (h264/aac) is also supported.\
 Developed on Linux, probably works on Windows.
 
 ## Features
@@ -61,6 +62,7 @@ To set the size limit to 4MiB, 120 seconds with no sound, use `--board other`\
 Remove sound altogether with `--no_audio`\
 Manually set the file size limit, in MiB, with `--size`, i.e. `--size 5` will target a 5 MiB file.
 
+Make an .mp4 instead  of .webm with the `--mp4` flag or `--codec libx264`\
 Enable audio volume normalization with `--normalize` or `-n`\
 Skip black frames at the start of the video with `--blackframe`\
 Crop using automatic edge detection with `--auto_crop`\
@@ -89,6 +91,8 @@ Type `--help` for a complete list of commands.
 - Use `--fast` to significantly speed up encoding at the expense of quality and rate control accuracy.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
+- With `--codec libx264`, 'temp.aac' and 'temp.normalized.aac' are generated instead of .opus files.
+- Currently, image + audio combine mode only makes .webm files (vp9/opus), `--codec libx264` intentionally has no effect.
 - The file 'temp.ass' is generated if burning in soft subs. I tried using the subs directly from the video, but this didn't work well when making clips, so I had to resort to exporting to a separate file.
 - Subtitle burn-in is mostly tested with ASS subs. If external subs are in a format that ffmpeg doesn't recognize, you'll have to convert them manually.
 - Audio will always be re-encoded even if the source is opus. I tried to make ffmpeg's copy option work, but it didn't work well when making clips.

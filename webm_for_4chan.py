@@ -269,14 +269,14 @@ def get_audio_layout(input_filename : str, track : int):
 # Simply renders the audio to file and gets its size.
 # This is the most precise way of knowing the final audio size and rendering this takes a fraction of the time it takes to render the video.
 # Returns a tuple containing the audio bit rate, normalization parameters if applicable, the surround workaround filter if applicable, and a special flag if no audio streams were found
-def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode, normalize):
+def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode, acodec : str, normalize):
     if str(mode) == 'wsg' or str(mode) == 'gif':
         surround_workaround = False # For working around a known bug in libopus: https://trac.ffmpeg.org/ticket/5718
         surround_workaround_args = None
-        output = 'temp.opus'
+        output = 'temp.opus' if acodec == 'libopus' else 'temp.aac'
         if os.path.isfile(output):
             os.remove(output)
-        ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', 'libopus', '-b:a', audio_bitrate]
+        ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', acodec, '-b:a', audio_bitrate]
         if track is not None: # Optional audio track selection
             ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
         ffmpeg_cmd1 = ffmpeg_cmd.copy()
@@ -342,11 +342,11 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 params = find_json(result.stderr)
             if params is not None:
                 print('Normalizing audio (2nd pass)')
-                output2 = 'temp.normalized.opus'
+                output2 = 'temp.normalized.opus' if acodec == 'libopus' else 'temp.normalized.aac'
                 if os.path.isfile(output2):
                     os.remove(output2)
                 # The size of the normalized audio is different from the initial one, so render to get the exact size
-                ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', 'libopus', '-filter:a', 'loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}'.format(params['input_i'], params['input_lra'], params['input_tp'], params['input_thresh']), '-b:a', audio_bitrate]
+                ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', acodec, '-filter:a', 'loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}'.format(params['input_i'], params['input_lra'], params['input_tp'], params['input_thresh']), '-b:a', audio_bitrate]
                 if track is not None: # Optional audio track selection
                     ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
                 if surround_workaround:
@@ -479,11 +479,12 @@ def cropdetect(input_filename, start, duration):
 # Convoluted method of determining the output file name. Avoid overwriting existing files, etc.
 def get_output_filename(input_filename, args):
     # Use manually specified output
+    suffix = '.webm' if args.codec == 'libvpx-vp9' else '.mp4'
     if args.output is not None:
         output = args.output
         # Force webm suffix
-        if os.path.splitext(output)[-1] != '.webm':
-            output += '.webm'
+        if os.path.splitext(output)[-1] != suffix:
+            output += suffix
         if os.path.isfile(output):
             confirmation = ''
             while not (confirmation.lower() == 'y' or confirmation.lower() == 'n'):
@@ -501,7 +502,7 @@ def get_output_filename(input_filename, args):
         while True:
             # Rename the output by prepending '_1_' to the start of the file name.
             # The dirname shenanigans are an attempt to differentiate a file in a subdirectory vs a filename unqualified in the current directory.
-            final_output = os.path.dirname(output) + (os.path.sep if os.path.dirname(output) != "" else "") + '_{}_'.format(filename_count) + os.path.basename(output) + '.webm'
+            final_output = os.path.dirname(output) + (os.path.sep if os.path.dirname(output) != "" else "") + '_{}_'.format(filename_count) + os.path.basename(output) + suffix
             if os.path.isfile(final_output):
                 filename_count += 1 # Try to deconflict the file name by finding a different file name
             else:
@@ -636,7 +637,8 @@ def process_video(input_filename, start, duration, args, full_video):
         print(audio_bitrate)
         print('Calculating audio size')
         # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
-        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.board, args.normalize)
+        acodec = 'libopus' if args.codec == 'libvpx-vp9' else 'aac'
+        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.board, acodec, args.normalize)
         print('Audio size: {}kB'.format(int(audio_size/1024)))
     size_limit = get_size_limit(args)
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
@@ -736,15 +738,27 @@ def process_video(input_filename, start, duration, args, full_video):
     if args.audio_filter is not None:
         audio_filters.append(args.audio_filter)
     
-    video_codec = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
-    if args.fast:
-        video_codec.extend(["-cpu-used", "5"]) # By default, this is 0, 5 means worst quality but fastest
-    if not args.no_mt: # Enable multithreading
-        video_codec.extend(["-row-mt", "1"])
+    video_codec = []
+    if args.codec == 'libvpx-vp9':
+        video_codec = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
+        if args.fast:
+            video_codec.extend(["-cpu-used", "5"]) # By default, this is 0, 5 means worst quality but fastest
+        if not args.no_mt: # Enable multithreading
+            video_codec.extend(["-row-mt", "1"])
+    elif args.codec == 'libx264':
+        video_codec = ["-c:v", "libx264", "-preset", 'fast' if args.fast else 'slower']
+    else:
+        raise RuntimeError("Invalid codec option '{}'".format(args.codec))
     print('Target bitrate: {}'.format(video_bitrate))
     video_codec.extend(["-b:v", video_bitrate, "-async", "1", "-vsync", "2"])
     
-    audio_codec = ["-an"] if no_audio else ["-c:a", "libopus", '-b:a', audio_bitrate]
+    audio_codec = []
+    if no_audio:
+        audio_codec = ["-an"]
+    elif args.codec == 'libvpx-vp9':
+        audio_codec = ["-c:a", "libopus", '-b:a', audio_bitrate]
+    elif args.codec == 'libx264':
+        audio_codec = ["-c:a", "aac", '-b:a', audio_bitrate]
 
     # The main part where the video is rendered
     encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.board, args.dry_run)
@@ -783,6 +797,9 @@ def image_audio_combine(input_image, input_audio, args):
         args.board = BoardMode.gif
     if args.no_audio:
         print("Warning: --no_audio flag will be ignored for image + audio combine mode.")
+    if args.codec != 'libvpx-vp9':
+        print("Warning: --codec is fixed to libvpx-vp9 for image + audio combine mode. Input will be ignored.")
+        args.codec = 'libvpx-vp9'
     output = get_output_filename(input_audio, args)
     
     audio_subtype = mimetypes.guess_type(input_audio)[0].split('/')[-1]
@@ -803,7 +820,7 @@ def image_audio_combine(input_image, input_audio, args):
         audio_copy = True
         audio_size = os.path.getsize(input_audio)
     else:
-        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, args.normalize)
+        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, 'libopus', args.normalize)
         if no_audio:
             raise RuntimeError('Unable to complete image + audio combine mode. No audio stream found.')
     print('Audio size: {}kB'.format(int(audio_size/1024)))
@@ -899,7 +916,7 @@ def image_audio_combine(input_image, input_audio, args):
     return output
 
 def cleanup():
-    for filename in ['temp.opus', 'temp.normalized.opus', 'temp.ass', 'ffmpeg2pass-0.log']:
+    for filename in ['temp.opus', 'temp.aac', 'temp.normalized.opus', 'temp.normalized.aac', 'temp.ass', 'ffmpeg2pass-0.log']:
         if os.path.isfile(filename):
             os.remove(filename)
 
@@ -927,6 +944,7 @@ if __name__ == '__main__':
         parser.add_argument('--blackframe', action='store_true', help="Skip initial black frames using a first pass with blackframe filter.")
         parser.add_argument('--board', '--mode', dest='board', type=BoardMode, default='wsg', choices=list(BoardMode), help='Webm convert mode. wsg=6MB with sound, gif=4MB with sound, other=4MB no sound')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
+        parser.add_argument('--codec', type=str, default='libvpx-vp9', choices=['libvpx-vp9','libx264'], help='Video codec to use. Default is libvpx-vp9.')
         parser.add_argument('--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
@@ -934,6 +952,7 @@ if __name__ == '__main__':
         parser.add_argument('--fps', type=float, help='Manual fps override.')
         parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
         parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
+        parser.add_argument('--mp4', action='store_true', help="Make .mp4 instead of .webm (shortcut for --codec libx264)")
         parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")
         parser.add_argument('--no_audio', action='store_true', help='Drop audio if it exists')
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
@@ -946,6 +965,8 @@ if __name__ == '__main__':
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()
+        if args.mp4: # Use this shortcut flag to override the --codec option
+            args.codec = 'libx264'
         input_filename = None
         if args.size is not None and args.size > 6.0:
             print("Warning: Manual size limit is larger than 4chan's supported size of 6MiB!")
