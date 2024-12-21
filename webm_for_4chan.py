@@ -126,6 +126,23 @@ def scale_to_1080(width, height):
     scale_factor = 1080 / min_dimension
     return [width * scale_factor, height * scale_factor]
 
+# Libx264 apparently needs the vertical resolution to be an even number. This adjusts the resolution to the nearest even number.
+def scale_vertical_to_even(original_width, original_height, scaled_width, scaled_height):
+    # No need to adjust if it's already an even number
+    if scaled_height % 2 == 0:
+        return int(max(scaled_width, scaled_height))
+    # Search for new height
+    new_height = int(scaled_height)
+    while new_height > 0:
+        new_height -= 1 # Reduce height by one until we find the nearest resolution that satisfies the requirement
+        new_scale = scaled_height / new_height
+        new_width = scaled_width * new_scale
+        adjusted_scale = max(new_width, new_height) / max(original_width, original_height)
+        adjusted_height = int(original_height * adjusted_scale)
+        #print(adjusted_height)
+        if (adjusted_height % 2 == 0):
+            return int(max(new_width, new_height))
+
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
 def calculate_target_resolution(duration, input_filename, target_bitrate, resizing_mode : ResizeMode, bypass_resolution_table : bool):
     if str(resizing_mode) != 'table':
@@ -177,7 +194,11 @@ def calculate_target_resolution(duration, input_filename, target_bitrate, resizi
                         break
                 if raw_max_dimension <= nearest_resolution: # No need to resize if the resolution we calculated is bigger than the native res
                     return None # Return None to signal that the video should not be resized
-                return nearest_resolution
+                final_scale = nearest_resolution / max(height, width)
+                final_horizontal_resolution = width * final_scale
+                final_vertical_resolution = height * final_scale
+                adjusted_resolution = scale_vertical_to_even(width, height, final_horizontal_resolution, final_vertical_resolution)
+                return adjusted_resolution
             else:
                 print(result.stdout)
                 print('ffprobe returned error code {}'.format(result.returncode))
