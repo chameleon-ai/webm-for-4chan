@@ -11,6 +11,7 @@ Developed on Linux, probably works on Windows.
 - (optional) Automatic volume normalization
 - (optional) Automatic cropping
 - Precise clipping to the nearest millisecond
+- Cut segments out of the middle of the video
 - Audio track selection for multi-audio sources
 - Subtitle burn-in
 - Skip black frames at the start of a video
@@ -56,6 +57,15 @@ Same as above, but select audio and subs by index instead of language:\
 Use external subtitles:\
 `python webm_for_4chan.py input.mkv --sub_file "input.en.ssa"`
 
+Cut a 30 second segment out of the middle of the video starting at 1 minute:\
+`python webm_for_4chan.py input.mkv input.mp4 -x "1:00-1:30"`\
+You can chain multiple cuts together with ';'\
+Cut 2 segments. Cut #1 starting at 1:00 and ending at 1:30, cut #2 starting at 1:45 and ending at 2:00:\
+`python webm_for_4chan.py input.mp4 -x "1:00-1:30;1:45-2:00"`\
+Make a clip from 1 hour 20 minutes to 1 hour 23 minutes and cut the middle minute out, resulting in a 2 minute final clip:\
+`python webm_for_4chan.py input.mp4 -s 1:20:00 -e 1:23:00 -x "1:21:00-1:22:00`\
+Note that the timestamps for cutting are always absolute time from the original input.
+
 By default, the script renders up to 6MiB, 400 seconds with sound for wsg.\
 To set the size limit to 4MiB, 120 seconds with sound, use `--board gif`\
 To set the size limit to 4MiB, 120 seconds with no sound, use `--board other`\
@@ -92,6 +102,8 @@ Type `--help` for a complete list of commands.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
 - With `--codec libx264`, 'temp.aac' and 'temp.normalized.aac' are generated instead of .opus files.
+- When using `-x`/`--cut`, a lossless temporary file of the assembled segments called 'temp.mkv' gets generated.
+- When using `-x`/`--cut`, it is currently not possible to burn-in subtitles or manually specify an audio track.
 - Currently, image + audio combine mode only makes .webm files (vp9/opus), `--codec libx264` intentionally has no effect.
 - The file 'temp.ass' is generated if burning in soft subs. I tried using the subs directly from the video, but this didn't work well when making clips, so I had to resort to exporting to a separate file.
 - Subtitle burn-in is mostly tested with ASS subs. If external subs are in a format that ffmpeg doesn't recognize, you'll have to convert them manually.

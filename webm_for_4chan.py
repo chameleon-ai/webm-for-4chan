@@ -416,6 +416,105 @@ def list_audio(input_filename):
         print(result.stdout)
         raise RuntimeError('ffprobe returned code {}'.format(result.returncode))
 
+def build_segments(start, duration, args):
+    try:
+        video_filter_graph = ''
+        audio_filter_graph = ''
+        segments_duration = datetime.timedelta(seconds=0.0)
+
+        # Parse all segments
+        segments_to_cut = []
+        for segment in args.cut.split(';'):
+            segment_start, segment_end = segment.split('-')
+            absolute_start = parsetime(segment_start)
+            absolute_end = parsetime(segment_end)
+            if absolute_start < start or absolute_end < start:
+                raise RuntimeError('Segment {}-{} starts before the start time of {}'.format(absolute_start, absolute_end, start))
+            relative_start = absolute_start - start
+            relative_end = absolute_end - start
+            segments_to_cut.append((relative_start, relative_end))
+            print('Identified cut segment: {}-{}'.format(absolute_start, absolute_end))
+        
+        # Invert the cut segments into the segments to keep
+        segments_to_keep = []
+        temp_start_time = datetime.timedelta(seconds=0.0)
+        for segment_start, segment_end in segments_to_cut:
+            segment_duration = segment_end - segment_start
+            segments_duration += segment_duration
+            start_time = temp_start_time
+            end_time = segment_start
+            segments_to_keep.append((start_time, end_time))
+            temp_start_time = end_time + segment_duration
+        # Final segment
+        segments_to_keep.append((temp_start_time, duration))
+
+        print('Total cut segment time: {}'.format(segments_duration))
+
+        # Build a filter graph on the kept segments
+        # Nice reference for how to build a filter graph: https://github.com/sriramcu/ffmpeg_video_editing
+        for index, segment in enumerate(segments_to_keep, start=1):
+            segment_start, segment_end = segment
+            # [0]trim=start=00:00:34.5:end=00:00:55.1,setpts=PTS-STARTPTS[v1];
+            video_filter_graph += '[0]trim=start={}:end={},setpts=PTS-STARTPTS[v{}];'.format(segment_start.total_seconds(), segment_end.total_seconds(), index)    
+            audio_filter_graph += '[0]atrim=start={}:end={},asetpts=PTS-STARTPTS[a{}];'.format(segment_start.total_seconds(), segment_end.total_seconds(), index)  
+            #print('{} {}-{}'.format(index, segment_start, segment_end))
+        for index, segment in enumerate(segments_to_keep, start=1):
+            # [v1][v2][v3]concat=n=3:v=1:a=0[outv]
+            video_filter_graph += '[v{}]'.format(index)
+        video_filter_graph += 'concat=n={}:v=1:a=0[outv]'.format(len(segments_to_keep))
+        for index, segment in enumerate(segments_to_keep, start=1):
+            audio_filter_graph += '[a{}]'.format(index)
+        audio_filter_graph += 'concat=n={}:v=0:a=1[outa]'.format(len(segments_to_keep))
+        return video_filter_graph, audio_filter_graph
+    except Exception as e:
+        raise RuntimeError('Error parsing cut segments: {}'.format(e))
+
+def cut_segments(input_filename : str, start, duration, full_video : bool, args):
+
+    # Make sure no audio tracks beside the default are specified
+    audio_tracks = list_audio(input_filename)
+    if len(audio_tracks) > 1:
+        if args.audio_index is not None and args.audio_index > 0:
+            raise RuntimeError("--cut does not support cutting from multi-audio streams except for default stream 0")
+        if args.audio_lang is not None:
+            for key, value in audio_tracks.items():
+                if args.audio_lang == value and key > 0:
+                    raise RuntimeError("--cut does not support cutting from multi-audio streams except for default stream 0")
+    # Also make sure no subtitle burn-in is enabled
+    if args.auto_subs is True or args.sub_index is not None or args.sub_lang is not None or args.sub_file is not None:
+        raise RuntimeError("--cut is not compatible with subtitle burn-in.")
+    # Can't use 5.1 side surround sound when making a cut due to the libopus bug
+    layout = get_audio_layout(input_filename, 0)
+    if '5.1(side)' in layout:
+        raise RuntimeError("5.1(side) surround sound detected. --cut is not compatible with this audio track.")
+
+    video_filter_graph, audio_filter_graph = build_segments(start, duration, args)
+    ffmpeg_args = ['ffmpeg', '-hide_banner', '-y']
+    if not full_video:
+        ffmpeg_args.extend(['-ss', str(start), '-t', str(duration)])
+    # Input file to process
+    ffmpeg_args.extend(['-i', input_filename])
+    # Build the filter arguments
+    ffmpeg_args.extend(['-filter_complex', video_filter_graph + ';' + audio_filter_graph, '-map', '[outv]', '-map', '[outa]'])
+
+    # Encoder. This is used to generate a temporary file.
+    ffmpeg_args.extend(["-c:v", "libx265", "-x265-params", "lossless=1"])
+    ffmpeg_args.extend(["-c:a", "libopus", "-b:a", "512k"])
+    
+    # Output file
+    output_filename = 'temp.mkv'
+    ffmpeg_args.append(output_filename)
+    print('Rendering cut video...')
+    print(' '.join(ffmpeg_args))
+    result = subprocess.run(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    if result.returncode != 0:
+        print(result.stderr)
+        raise RuntimeError('ffmpeg returned code {}'.format(result.returncode))
+    if os.path.isfile(output_filename):
+        return output_filename
+    else:
+        raise RuntimeError("File '{}' not found".format(output_filename))
+
 def blackframe(input_filename, start, duration):
     print('Running blackframe detection')
     try:
@@ -595,7 +694,16 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
 
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
-    
+
+    if args.cut is not None:
+        cut_filename = cut_segments(input_filename, start, duration, full_video, args)
+        # Reassign variables to use new temp file
+        input_filename = cut_filename
+        start = datetime.timedelta(seconds=0.0)
+        duration = get_video_duration(input_filename, start.total_seconds())
+        print("Using cut file '{}', duration: {}".format(cut_filename,duration))
+        full_video = True
+
     if args.blackframe:
         frame_skip = blackframe(input_filename, start, duration)
         if frame_skip.total_seconds() > 0:
@@ -800,6 +908,8 @@ def image_audio_combine(input_image, input_audio, args):
     if args.codec != 'libvpx-vp9':
         print("Warning: --codec is fixed to libvpx-vp9 for image + audio combine mode. Input will be ignored.")
         args.codec = 'libvpx-vp9'
+    if args.cut is not None:
+        print("Warning: --cut is not supported in image + audio mode. Parameters will be ignored.")
     output = get_output_filename(input_audio, args)
     
     audio_subtype = mimetypes.guess_type(input_audio)[0].split('/')[-1]
@@ -916,7 +1026,7 @@ def image_audio_combine(input_image, input_audio, args):
     return output
 
 def cleanup():
-    for filename in ['temp.opus', 'temp.aac', 'temp.normalized.opus', 'temp.normalized.aac', 'temp.ass', 'ffmpeg2pass-0.log']:
+    for filename in ['temp.opus', 'temp.aac', 'temp.normalized.opus', 'temp.normalized.aac', 'temp.ass', 'temp.mkv', 'ffmpeg2pass-0.log']:
         if os.path.isfile(filename):
             os.remove(filename)
 
@@ -936,6 +1046,7 @@ if __name__ == '__main__':
         parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")
         parser.add_argument('-a', '--audio_filter', type=str, help="Audio filter arguments. This string is passed directly to the -af chain.")
         parser.add_argument('-v', '--video_filter', type=str, help="Video filter arguments. This string is passed directly to the -vf chain.")
+        parser.add_argument('-x', '--cut', type=str, help='Segments to cut, separated by ";", i.e. "5:00-5:15;5:45-5:52.4"')
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--audio_rate', type=int, choices=audio_bitrate_table, help='Manual audio bit-rate override (kbps)')
