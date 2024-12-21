@@ -1047,6 +1047,7 @@ if __name__ == '__main__':
         parser.add_argument('-a', '--audio_filter', type=str, help="Audio filter arguments. This string is passed directly to the -af chain.")
         parser.add_argument('-v', '--video_filter', type=str, help="Video filter arguments. This string is passed directly to the -vf chain.")
         parser.add_argument('-x', '--cut', type=str, help='Segments to cut, separated by ";", i.e. "5:00-5:15;5:45-5:52.4"')
+        parser.add_argument('-k', '--keep_temp_files', action='store_true', help="Keep temporary files generated during size calculation etc.")
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--audio_rate', type=int, choices=audio_bitrate_table, help='Manual audio bit-rate override (kbps)')
@@ -1093,7 +1094,7 @@ if __name__ == '__main__':
                     raise RuntimeError("Couldn't identify audio source from input files.")
                 result = image_audio_combine(image_input, audio_input, args)
                 print('output file: "{}"'.format(result))
-                if not args.dry_run:
+                if not args.dry_run and not args.keep_temp_files:
                     cleanup()
                 exit(0)
             elif len(unknown_args) > 2:
@@ -1144,7 +1145,7 @@ if __name__ == '__main__':
                 raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
             result = process_video(input_filename, start_time, duration, args, full_video)
             print('output file: "{}"'.format(result))
-            if not args.dry_run:
+            if not args.dry_run and not args.keep_temp_files:
                 cleanup()
         else:
             print('Input file not found: "' + input_filename + '"')
