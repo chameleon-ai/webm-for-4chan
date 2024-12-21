@@ -63,8 +63,10 @@ You can chain multiple cuts together with ';'\
 Cut 2 segments. Cut #1 starting at 1:00 and ending at 1:30, cut #2 starting at 1:45 and ending at 2:00:\
 `python webm_for_4chan.py input.mp4 -x "1:00-1:30;1:45-2:00"`\
 Make a clip from 1 hour 20 minutes to 1 hour 23 minutes and cut the middle minute out, resulting in a 2 minute final clip:\
-`python webm_for_4chan.py input.mp4 -s 1:20:00 -e 1:23:00 -x "1:21:00-1:22:00`\
-Note that the timestamps for cutting are always absolute time from the original input.
+`python webm_for_4chan.py input.mp4 -s 1:20:00 -e 1:23:00 -x "1:21:00-1:22:00"`\
+Note that the timestamps for cutting are always absolute time from the original input.\
+You must specify a start and end timestamp for the cut, separated by '-'.\
+Cuts must be in chronological order and must start after the `-s` start time.
 
 By default, the script renders up to 6MiB, 400 seconds with sound for wsg.\
 To set the size limit to 4MiB, 120 seconds with sound, use `--board gif`\
