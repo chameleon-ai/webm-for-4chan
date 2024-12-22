@@ -471,6 +471,13 @@ def build_segments(start, duration, args):
 
         print('Total cut segment time: {}'.format(segments_duration))
 
+        # Duration check to make sure it will fit for the target board
+        adjusted_duration = duration - segments_duration
+        duration_sec = adjusted_duration.total_seconds()
+        duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
+        if duration_sec > duration_limit:
+            raise ValueError("Final duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
+
         # Build a filter graph on the kept segments
         # Nice reference for how to build a filter graph: https://github.com/sriramcu/ffmpeg_video_editing
         for index, segment in enumerate(segments_to_keep, start=1):
@@ -724,6 +731,12 @@ def process_video(input_filename, start, duration, args, full_video):
         duration = get_video_duration(input_filename, start.total_seconds())
         print("Using cut file '{}', duration: {}".format(cut_filename,duration))
         full_video = True
+    
+    # Duration check to make sure it will fit for the target board
+    duration_sec = duration.total_seconds()
+    duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
+    if duration_sec > duration_limit:
+        raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
 
     if args.blackframe:
         frame_skip = blackframe(input_filename, start, duration)
@@ -1160,10 +1173,6 @@ if __name__ == '__main__':
                 if start_time.total_seconds() == 0:
                     full_video = True
             print('duration:', duration)
-            duration_sec = duration.total_seconds()
-            duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
-            if duration_sec > duration_limit:
-                raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
             result = process_video(input_filename, start_time, duration, args, full_video)
             print('output file: "{}"'.format(result))
             if not args.dry_run and not args.keep_temp_files:
