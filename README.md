@@ -38,7 +38,7 @@ The output will be the name of the input prepended with `_1_`, i.e. `_1_input.we
 Use `--output` to specify a custom file name.
 
 ### Clipping
-Use `--start`/`-s` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.
+Use `-s`/`--start` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.
 
 Clip the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
 `python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`
@@ -81,7 +81,7 @@ Cut a 30 second segment out of the middle of the video starting at 1 minute:\
 Cut 2 segments. Cut #1 starting at 1:00 and ending at 1:30, cut #2 starting at 1:45 and ending at 2:00:\
 `python webm_for_4chan.py input.mp4 -x "1:00-1:30;1:45-2:00"`
 
-Make a clip from 1 hour 20 minutes to 1 hour 23 minutes and cut the middle minute out, resulting in a 2 minute final clip:\
+Make a clip from 1:20:00 to 1:23:00 and cut the middle minute out, resulting in a 2 minute final clip:\
 `python webm_for_4chan.py input.mp4 -s 1:20:00 -e 1:23:00 -x "1:21:00-1:22:00"`
 
 Concatenate a segment from 1:00:05 to 1:00:10 and a segment from 1:28:30 to 1:28:45, creating a 20 second final clip:\
@@ -124,7 +124,8 @@ Type `--help` for a complete list of commands.
 - Use `--fast` to significantly speed up encoding at the expense of quality and rate control accuracy.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
-- With `--codec libx264`, 'temp.aac' and 'temp.normalized.aac' are generated instead of .opus files.
+- With `--mp4`/`--codec libx264`, 'temp.aac' and 'temp.normalized.aac' are generated instead of .opus files.
+- Expect size overshoots much more often with `--mp4`/`--codec libx264`. This is a result of libx264's rate control accuracy being much more sloppy than libvpx-vp9.
 - When using `-x`/`--cut` or `-c`/`--concat`, a lossless temporary file of the assembled segments called 'temp.mkv' gets generated.
 - When using `-x`/`--cut` or `-c`/`--concat` it is currently not possible to burn-in subtitles or to specify an audio track besides the default.
 - Currently, image + audio combine mode only makes .webm files (vp9/opus), `--codec libx264` intentionally has no effect.
