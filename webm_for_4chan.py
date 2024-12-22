@@ -480,7 +480,7 @@ def build_concat_segments(start, duration, args):
             segment_duration = segment_end - segment_start
             segments_duration += segment_duration
         # Duration check to make sure it will fit for the target board
-        adjusted_duration = duration - segments_duration
+        adjusted_duration = segments_duration
         duration_sec = adjusted_duration.total_seconds()
         duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
         if duration_sec > duration_limit:
@@ -535,10 +535,10 @@ def segment_video(input_filename : str, start, duration, full_video : bool, args
         if args.audio_lang is not None:
             for key, value in audio_tracks.items():
                 if args.audio_lang == value and key > 0:
-                    raise RuntimeError("--cut does not support cutting from multi-audio streams except for default stream 0")
+                    raise RuntimeError("--cut/--concat does not support cutting from multi-audio streams except for default stream 0")
     # Also make sure no subtitle burn-in is enabled
     if args.auto_subs is True or args.sub_index is not None or args.sub_lang is not None or args.sub_file is not None:
-        raise RuntimeError("--cut is not compatible with subtitle burn-in.")
+        raise RuntimeError("--cut/--concat is not compatible with subtitle burn-in.")
     # Can't use 5.1 side surround sound when making a cut due to the libopus bug
     layout = get_audio_layout(input_filename, 0)
     if '5.1(side)' in layout:
