@@ -480,11 +480,12 @@ def build_concat_segments(start, duration, args):
             segment_duration = segment_end - segment_start
             segments_duration += segment_duration
         # Duration check to make sure it will fit for the target board
-        adjusted_duration = segments_duration
-        duration_sec = adjusted_duration.total_seconds()
-        duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
-        if duration_sec > duration_limit:
-            raise ValueError("Final duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
+        if not args.no_duration_check:
+            adjusted_duration = segments_duration
+            duration_sec = adjusted_duration.total_seconds()
+            duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
+            if duration_sec > duration_limit:
+                raise ValueError("Final duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
         print('Total concatenated segment time: {}'.format(segments_duration))
         
         # Segments are ready to be built
@@ -513,11 +514,12 @@ def build_cut_segments(start, duration, args):
 
         print('Total cut segment time: {}'.format(segments_duration))
         # Duration check to make sure it will fit for the target board
-        adjusted_duration = duration - segments_duration
-        duration_sec = adjusted_duration.total_seconds()
-        duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
-        if duration_sec > duration_limit:
-            raise ValueError("Final duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
+        if not args.no_duration_check:
+            adjusted_duration = duration - segments_duration
+            duration_sec = adjusted_duration.total_seconds()
+            duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
+            if duration_sec > duration_limit:
+                raise ValueError("Final duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
         
         # Segments are ready to be built
         return build_filter_graph(segments_to_keep)
@@ -775,10 +777,11 @@ def process_video(input_filename, start, duration, args, full_video):
         full_video = True
     
     # Duration check to make sure it will fit for the target board
-    duration_sec = duration.total_seconds()
-    duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
-    if duration_sec > duration_limit:
-        raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
+    if not args.no_duration_check:
+        duration_sec = duration.total_seconds()
+        duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
+        if duration_sec > duration_limit:
+            raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
 
     if args.blackframe:
         frame_skip = blackframe(input_filename, start, duration)
@@ -1145,6 +1148,7 @@ if __name__ == '__main__':
         parser.add_argument('--mp4', action='store_true', help="Make .mp4 instead of .webm (shortcut for --codec libx264)")
         parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")
         parser.add_argument('--no_audio', action='store_true', help='Drop audio if it exists')
+        parser.add_argument('--no_duration_check', action='store_true', help='Disable max duration check')
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
         parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
