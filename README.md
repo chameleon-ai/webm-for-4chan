@@ -103,7 +103,7 @@ Crop using manually specified boundaries with `--crop`\
 Automatically burn-in the first available subtitles, if any exist, with `--auto_subs`\
 Print available built-in subtitles with  `--list_subs`\
 Print available audio tracks with  `--list_audio`\
-Manually specify arbitrary audio and video filters for ffmpeg with `-a`/`--audio_filter` and `-v`/`--video_filter`\
+Specify arbitrary filters for ffmpeg with `-a`/`--audio_filter` and `-v`/`--video_filter`\
 For fun, try `--first_second_every_minute`, inspired by the youtube channel FirstSecondEveryMinute (Warning: This can take a while)
 
 Type `--help` for a complete list of commands.
@@ -136,5 +136,24 @@ Type `--help` for a complete list of commands.
 - Audio will always be re-encoded even if the source is opus. I tried to make ffmpeg's copy option work, but it didn't work well when making clips.
 - You may notice that rendering is significantly slower when burning in subtitles. I tried many different settings and ffmpeg is very fragile, this is the only method I could figure out that works consistently.
 
+## Tips, Tricks, and References
+- If you're unsure about your `-s`/`--start` and `-e`/`--end` timestamps, try a `--dry_run` and inspect temp.opus to see if the audio is the right slice that you want.
+- For long videos (over about 3 minutes), it's usually beneficial to add `-v spp`
+  - https://ffmpeg.org/ffmpeg-filters.html#spp-1
+- Filter graph building for `-c`/`--concat` and `-x`/`--cut` were made possible through this valuable reference:
+  - https://github.com/sriramcu/ffmpeg_video_editing
+- Specify `-k` when running `-c`/`--concat` or`-x`/`--cut` to keep the original file containing the spliced segments. This will save time if you are unsatisfied with the final result and need to re-encode.
+- There is a known issue with some varieties of surround sound for libopus. I have attempted to detect and correct for this issue, but some features in the script are incompatible with this workaround. For more information, see:
+  - https://trac.ffmpeg.org/ticket/5718
+- More information on the audio normalization technique used by `-n`/`--normalize`:
+  - https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg
+  - https://superuser.com/questions/1312811/ffmpeg-loudnorm-2pass-in-single-line
+- The `--blackframe` option uses ffmpeg's blackdetect and blackframe filters. For more information:
+  - https://ffmpeg.org/ffmpeg-filters.html#blackdetect
+- The `--auto_crop` option makes use of ffmpeg's cropdetect filter. For more information:
+  - https://ffmpeg.org/ffmpeg-filters.html#cropdetect
+- You can do basically anything you want with `-v`/`--video_filter` and `-a`/`--audio_filter` as they are passed directly to ffmpeg's -vf and -af arguments. For instance, if you want to reverse the clip, just specify `-v reverse -a areverse`
+  - https://ffmpeg.org/ffmpeg-filters.html
+
 ## Testers Wanted!
-I tested this as well as I can, but I don't know how well it works for others. Some anons have tested pre-release versions of this script but any extra feedback is welcome.
+I tested this as well as I can, but I don't know how well it works for others. Any feedback is welcome. If you come across a bug, please give me the printed output and provide the input file along with your command-line arguments if possible. There are a lot of quirks depending on the exact input, so having the original file goes a long way in being able to replicate the issue.
