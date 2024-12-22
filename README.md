@@ -103,7 +103,8 @@ Crop using manually specified boundaries with `--crop`\
 Automatically burn-in the first available subtitles, if any exist, with `--auto_subs`\
 Print available built-in subtitles with  `--list_subs`\
 Print available audio tracks with  `--list_audio`\
-Manually specify arbitrary audio and video filters for ffmpeg with `--audio_filter` and `--video_filter`
+Manually specify arbitrary audio and video filters for ffmpeg with `--audio_filter` and `--video_filter`\
+For fun, try `--first_second_every_minute`, inspired by the youtube channel FirstSecondEveryMinute (Warning: This can take a while)
 
 Type `--help` for a complete list of commands.
 

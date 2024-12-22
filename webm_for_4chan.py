@@ -748,10 +748,22 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
         if pope.returncode != 0:
             raise RuntimeError('ffmpeg returned code {}'.format(pope.returncode))
 
+# Take the first second from every minute within the specified start and duration.
+# Inspired by the youtube channel @FirstSecondEveryMinute
+def first_second_every_minute(start : datetime.timedelta, duration : datetime.timedelta):
+    segments = []
+    current_time = start
+    while current_time.total_seconds() <= (duration.total_seconds() - 1):
+        segments.append('{}-{}'.format(current_time, current_time + datetime.timedelta(seconds=1)))
+        current_time += datetime.timedelta(minutes=1)
+    return ';'.join(segments)
+
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
 
-    if args.cut is not None or args.concat is not None:
+    if args.cut is not None or args.concat is not None or args.first_second_every_minute:
+        if args.first_second_every_minute:
+            args.concat = first_second_every_minute(start, duration)
         if args.cut is not None and args.concat is not None:
             raise RuntimeError("Cannot use both --concat and --cut. Please use only one option.")
         new_filename = segment_video(input_filename, start, duration, full_video, args)
@@ -1126,6 +1138,7 @@ if __name__ == '__main__':
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
+        parser.add_argument('--first_second_every_minute', action='store_true', help='Take 1 second from every minute of the input.')
         parser.add_argument('--fps', type=float, help='Manual fps override.')
         parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
         parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
