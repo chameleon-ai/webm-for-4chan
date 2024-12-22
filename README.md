@@ -12,6 +12,7 @@ Developed on Linux, probably works on Windows.
 - (optional) Automatic cropping
 - Precise clipping to the nearest millisecond
 - Cut segments out of the middle of the video
+- Concatenate segments from different parts of the video
 - Audio track selection for multi-audio sources
 - Subtitle burn-in
 - Skip black frames at the start of a video
@@ -36,10 +37,13 @@ Combine a static image (or animated gif) with audio:\
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
 Use `--output` to specify a custom file name.
 
+### Clipping
+Use `--start`/`-s` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.
+
 Clip the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
 `python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`
 
-Or specify a relative 2 minute duration:\
+Or specify a relative 2 minute duration using `-d`/`--duration`:\
 `python webm_for_4chan.py input.mp4 -s 1:23:45.1 -d 2:00`
 
 Start time is 0:00 by default, so you can render the first minute of the clip like this:\
@@ -48,39 +52,56 @@ Start time is 0:00 by default, so you can render the first minute of the clip li
 End time is also calculated if not specified, so to render from the 5:30 mark until the end of the video:\
 `python webm_for_4chan.py input.mp4 -s 5:30`
 
+### Subtitle Burn-in
 Render a 30 second anime clip with dual audio, select japanese audio and burn in english soft-subs:\
 `python webm_for_4chan.py input.mkv --sub_lang eng --audio_lang jpn -s 12:00 -d 30`
 
 Same as above, but select audio and subs by index instead of language:\
 `python webm_for_4chan.py input.mkv --sub_index 0 --audio_index 1 -s 12:00 -d 30`
 
+If you don't know the index or language, use `--list_subs` or `--list_audio`
+
 Use external subtitles:\
 `python webm_for_4chan.py input.mkv --sub_file "input.en.ssa"`
 
-Cut a 30 second segment out of the middle of the video starting at 1 minute:\
-`python webm_for_4chan.py input.mkv input.mp4 -x "1:00-1:30"`\
-You can chain multiple cuts together with ';'\
-Cut 2 segments. Cut #1 starting at 1:00 and ending at 1:30, cut #2 starting at 1:45 and ending at 2:00:\
-`python webm_for_4chan.py input.mp4 -x "1:00-1:30;1:45-2:00"`\
-Make a clip from 1 hour 20 minutes to 1 hour 23 minutes and cut the middle minute out, resulting in a 2 minute final clip:\
-`python webm_for_4chan.py input.mp4 -s 1:20:00 -e 1:23:00 -x "1:21:00-1:22:00"`\
-Note that the timestamps for cutting are always absolute time from the original input.\
-You must specify a start and end timestamp for the cut, separated by '-'.\
-Cuts must be in chronological order and must start after the `-s` start time.
+### Cutting or Concatenating Segments
+You can trim the video using 2 different methods: `-x`/`--cut` and `-c`/`--concat`\
+Cut means that the specified segments will be removed.\
+Concat means that only the specified segments will be kept (the opposite of cut)
+- Specify segments using a timestamp range, i.e. `"1:00-2:00"`
+- Chain multiple segments together with ';', i.e. `"1:00-2:00;2:05-2:10"`
+- Note that the segments are always absolute time from the original input.
+- You must specify a start and end timestamp for the segment, separated by '-'.
+- Segments must be in chronological order and must start after the `-s` start time.
+- It is highly recommended that you specify a `-s`/`--start` and `-e`/`--end` time even when using concat. The start and end time are passed to ffmpeg to trim the video before processing the segments, greatly increasing the speed and efficiency of the concat operation.
 
+Cut a 30 second segment out of the middle of the video starting at 1 minute:\
+`python webm_for_4chan.py input.mkv input.mp4 -x "1:00-1:30"`
+
+Cut 2 segments. Cut #1 starting at 1:00 and ending at 1:30, cut #2 starting at 1:45 and ending at 2:00:\
+`python webm_for_4chan.py input.mp4 -x "1:00-1:30;1:45-2:00"`
+
+Make a clip from 1 hour 20 minutes to 1 hour 23 minutes and cut the middle minute out, resulting in a 2 minute final clip:\
+`python webm_for_4chan.py input.mp4 -s 1:20:00 -e 1:23:00 -x "1:21:00-1:22:00"`
+
+Concatenate a segment from 1:00:05 to 1:00:10 and a segment from 1:28:30 to 1:28:45, creating a 20 second final clip:\
+`python webm_for_4chan.py input.mp4 -s 1:00:00 -e 1:30:00 -c "1:00:05-1:00:10;1:28:30-1:28:45"`
+
+### Changing Target Size and Removing Sound
 By default, the script renders up to 6MiB, 400 seconds with sound for wsg.\
 To set the size limit to 4MiB, 120 seconds with sound, use `--board gif`\
 To set the size limit to 4MiB, 120 seconds with no sound, use `--board other`\
 Remove sound altogether with `--no_audio`\
 Manually set the file size limit, in MiB, with `--size`, i.e. `--size 5` will target a 5 MiB file.
 
+### Miscellaneous Features
 Make an .mp4 instead  of .webm with the `--mp4` flag or `--codec libx264`\
 Enable audio volume normalization with `--normalize` or `-n`\
 Skip black frames at the start of the video with `--blackframe`\
 Crop using automatic edge detection with `--auto_crop`\
 Crop using manually specified boundaries with `--crop`\
 Automatically burn-in the first available subtitles, if any exist, with `--auto_subs`\
-Print available subtitles with  `--list_subs`\
+Print available built-in subtitles with  `--list_subs`\
 Print available audio tracks with  `--list_audio`\
 Manually specify arbitrary audio and video filters for ffmpeg with `--audio_filter` and `--video_filter`
 
@@ -104,8 +125,8 @@ Type `--help` for a complete list of commands.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
 - With `--codec libx264`, 'temp.aac' and 'temp.normalized.aac' are generated instead of .opus files.
-- When using `-x`/`--cut`, a lossless temporary file of the assembled segments called 'temp.mkv' gets generated.
-- When using `-x`/`--cut`, it is currently not possible to burn-in subtitles or manually specify an audio track.
+- When using `-x`/`--cut` or `-c`/`--concat`, a lossless temporary file of the assembled segments called 'temp.mkv' gets generated.
+- When using `-x`/`--cut` or `-c`/`--concat` it is currently not possible to burn-in subtitles or to specify an audio track besides the default.
 - Currently, image + audio combine mode only makes .webm files (vp9/opus), `--codec libx264` intentionally has no effect.
 - The file 'temp.ass' is generated if burning in soft subs. I tried using the subs directly from the video, but this didn't work well when making clips, so I had to resort to exporting to a separate file.
 - Subtitle burn-in is mostly tested with ASS subs. If external subs are in a format that ffmpeg doesn't recognize, you'll have to convert them manually.
