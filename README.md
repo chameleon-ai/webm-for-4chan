@@ -16,7 +16,7 @@ Developed on Linux, probably works on Windows.
 - Audio track selection for multi-audio sources
 - Subtitle burn-in
 - Skip black frames at the start of a video
-- Trim silence
+- Automatically trim silence
 - Music mode optimized for songs
 - Combine static image with audio
 
@@ -89,9 +89,9 @@ Concatenate a segment from 1:00:05 to 1:00:10 and a segment from 1:28:30 to 1:28
 `python webm_for_4chan.py input.mp4 -s 1:00:00 -e 1:30:00 -c "1:00:05-1:00:10;1:28:30-1:28:45"`
 
 ### Trimming Silence
-You can automatically trim silence from the video using `--trim_silence`. There are 4 options:
-- `--trim_silence start` trims the silence from the beginning of the video, advancing the specified start time
-- `--trim_silence end` trims the silence at the end of the video, reducing the specified end time or duration
+You can automatically cut silence from the video using `--trim_silence`. There are 4 options:
+- `--trim_silence start` trims the beginning of the video, advancing the specified start time
+- `--trim_silence end` trims the end of the video, reducing the specified end time or duration
 - `--trim_silence start_and_end` does both of the above
 - `--trim_silence all` trims all detected silence, even in the middle of the video. Note that this option overrides any manual cuts from the `-x`/`--cut` feature. This option can potentially take a long time if there are a lot of segments to cut out.
 
@@ -160,6 +160,8 @@ Type `--help` for a complete list of commands.
   - https://ffmpeg.org/ffmpeg-filters.html#blackdetect
 - The `--auto_crop` option makes use of ffmpeg's cropdetect filter. For more information:
   - https://ffmpeg.org/ffmpeg-filters.html#cropdetect
+- The `--trim_silence` option uses ffmpeg's silencedetect filter. For more information:
+  - https://ffmpeg.org/ffmpeg-filters.html#silencedetect
 - You can do basically anything you want with `-v`/`--video_filter` and `-a`/`--audio_filter` as they are passed directly to ffmpeg's -vf and -af arguments. For instance, if you want to reverse the clip, just specify `-v reverse -a areverse`
   - https://ffmpeg.org/ffmpeg-filters.html
 
