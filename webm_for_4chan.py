@@ -20,7 +20,7 @@ import traceback
 max_bitrate = 2800 # (kbps) Cap bitrate in case the clip is really short. This is already an absurdly high rate.
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
 max_duration = [400, 120] # Maximum clip durations, in seconds [wsg, all other boards]
-resolution_table = [480, 576, 640, 720, 840, 960, 1024, 1280, 1440, 1600, 1920, 2048] # Table of discrete resolutions
+resolution_table = [480, 576, 640, 736, 854, 960, 1024, 1280, 1440, 1600, 1920, 2048] # Table of discrete resolutions
 audio_bitrate_table = [12, 24, 32, 40 , 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512] # Table of discrete audio bit-rates
 resolution_fallback_map = { # This time-based lookup is used if smart resolution calculation fails for some reason
     15.0: 1920,
@@ -29,8 +29,8 @@ resolution_fallback_map = { # This time-based lookup is used if smart resolution
     75.0: 1280,
     115.0: 1024,
     145.0: 960,
-    185.0: 840,
-    245.0: 720,
+    185.0: 854,
+    245.0: 736,
     285.0: 640,
     330.0: 576,
     400.0: 480
@@ -143,22 +143,24 @@ def scale_to_1080(width, height):
     scale_factor = 1080 / min_dimension
     return [width * scale_factor, height * scale_factor]
 
-# Libx264 apparently needs the vertical resolution to be an even number. This adjusts the resolution to the nearest even number.
-def scale_vertical_to_even(original_width, original_height, scaled_width, scaled_height):
+# Libx264 apparently needs the vertical and horizontal resolution to be an even number. This adjusts the resolution to the nearest even number.
+def scale_to_even(original_width, original_height, scaled_width, scaled_height):
     # No need to adjust if it's already an even number
     if scaled_height % 2 == 0:
         return int(max(scaled_width, scaled_height))
     # Search for new height
-    new_height = int(scaled_height)
-    while new_height > 0:
-        new_height -= 1 # Reduce height by one until we find the nearest resolution that satisfies the requirement
-        new_scale = scaled_height / new_height
-        new_width = scaled_width * new_scale
-        adjusted_scale = max(new_width, new_height) / max(original_width, original_height)
-        adjusted_height = int(original_height * adjusted_scale)
-        #print(adjusted_height)
-        if (adjusted_height % 2 == 0):
-            return int(max(new_width, new_height))
+    height = int(scaled_height)
+    width = int(scaled_width)
+    next_height = height # A continually decreasing counter
+    # Brute force and find a resolution that is even horizontally and veritcally
+    while (next_height > 0) and ((height % 2 != 0) or (width % 2 != 0)):
+        next_height -= 1 # Reduce height by one until we find the nearest resolution that satisfies the requirement
+        scale = next_height / original_height
+        # Apparently ffmpeg rounds instead of truncates, so we can't rely on the integer floor
+        width = int(round(original_width * scale))
+        height = int(round(original_height * scale))
+        #print("{}x{}".format(width, height))
+    return int(max(height, width))
 
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
 def calculate_target_resolution(duration, input_filename, target_bitrate, resizing_mode : ResizeMode, bypass_resolution_table : bool):
@@ -214,7 +216,7 @@ def calculate_target_resolution(duration, input_filename, target_bitrate, resizi
                 final_scale = nearest_resolution / max(height, width)
                 final_horizontal_resolution = width * final_scale
                 final_vertical_resolution = height * final_scale
-                adjusted_resolution = scale_vertical_to_even(width, height, final_horizontal_resolution, final_vertical_resolution)
+                adjusted_resolution = scale_to_even(raw_width, raw_height, final_horizontal_resolution, final_vertical_resolution)
                 return adjusted_resolution
             else:
                 print(result.stdout)
