@@ -120,6 +120,23 @@ class ResizeMode(Enum):
     def __str__(self):
         return self.value
 
+# Different silence trim options
+class SilenceTrimMode(Enum):
+    start = 'start'
+    end = 'end'
+    start_and_end = 'start_and_end'
+    all = 'all'
+    def __str__(self):
+        return self.value
+
+# Perform duration check to make sure it still fits on the board
+def duration_check(duration : datetime.timedelta, board : BoardMode, no_duration_check : bool):
+    if not no_duration_check:
+        duration_sec = duration.total_seconds()
+        duration_limit = max_duration[0] if str(board) == 'wsg' else max_duration[1]
+        if duration_sec > duration_limit:
+            raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
+
 # Scales resolution sources to 1080p to match the calibrated resolution curve
 def scale_to_1080(width, height):
     min_dimension = min(width, height)
@@ -472,20 +489,16 @@ def build_filter_graph(segments_to_keep):
     audio_filter_graph += 'concat=n={}:v=0:a=1[outa]'.format(len(segments_to_keep))
     return video_filter_graph, audio_filter_graph
 
-def build_concat_segments(start, duration, args):
+def build_concat_segments(start, args):
     try:
         segments_to_keep = parse_segments(start, args.concat)
         segments_duration = datetime.timedelta(seconds=0.0)
         for segment_start, segment_end in segments_to_keep:
             segment_duration = segment_end - segment_start
             segments_duration += segment_duration
-        # Duration check to make sure it will fit for the target board
-        if not args.no_duration_check:
-            adjusted_duration = segments_duration
-            duration_sec = adjusted_duration.total_seconds()
-            duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
-            if duration_sec > duration_limit:
-                raise ValueError("Final duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
+        
+        # Make sure final duration time fits
+        duration_check(segments_duration, args.board, args.no_duration_check)
         print('Total concatenated segment time: {}'.format(segments_duration))
         
         # Segments are ready to be built
@@ -513,14 +526,11 @@ def build_cut_segments(start, duration, args):
         segments_to_keep.append((temp_start_time, duration))
 
         print('Total cut segment time: {}'.format(segments_duration))
-        # Duration check to make sure it will fit for the target board
-        if not args.no_duration_check:
-            adjusted_duration = duration - segments_duration
-            duration_sec = adjusted_duration.total_seconds()
-            duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
-            if duration_sec > duration_limit:
-                raise ValueError("Final duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
         
+        # Make sure final duration time fits
+        adjusted_duration = duration - segments_duration
+        duration_check(adjusted_duration, args.board, args.no_duration_check)
+
         # Segments are ready to be built
         return build_filter_graph(segments_to_keep)
     except Exception as e:
@@ -546,7 +556,7 @@ def segment_video(input_filename : str, start, duration, full_video : bool, args
     if '5.1(side)' in layout:
         raise RuntimeError("5.1(side) surround sound detected. --cut is not compatible with this audio track.")
 
-    video_filter_graph, audio_filter_graph = build_cut_segments(start, duration, args) if args.cut is not None else build_concat_segments(start, duration, args)
+    video_filter_graph, audio_filter_graph = build_cut_segments(start, duration, args) if args.cut is not None else build_concat_segments(start, args)
     ffmpeg_args = ['ffmpeg', '-hide_banner', '-y']
     if not full_video:
         ffmpeg_args.extend(['-ss', str(start), '-t', str(duration)])
@@ -632,6 +642,32 @@ def cropdetect(input_filename, start, duration):
         return crop_output[-1]
     else:
         return None
+
+def silencedetect(input_filename, start, duration):
+    print('Running silencedetect')
+    result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-af', 'silencedetect', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        print(result.stderr.decode())
+        raise RuntimeError('ffmpeg returned code {}'.format(result.returncode))
+    output = result.stderr.decode().splitlines()
+    silence_start = None
+    silence_end = None
+    silence_segments = []
+    for line in output:
+        if 'silencedetect' in line:
+            toks = line.split()
+            if 'silence_start:' in toks:
+                silence_start = datetime.timedelta(seconds=float(toks[toks.index('silence_start:') + 1]))
+            if 'silence_end:' in toks:
+                silence_end = datetime.timedelta(seconds=float(toks[toks.index('silence_end:') + 1]))
+                silence_segments.append((silence_start if silence_start is not None else start, silence_end))
+                silence_start = None
+                silence_end = None
+    # I don't think this is a real scenario but I'm covering my bases.
+    # This is just for the case where silencedetect prints a silence_start but not a silence_end.
+    if silence_start is not None and silence_end is None:
+        silence_segments.append(silence_start,start+duration)
+    return silence_segments
     
 # Convoluted method of determining the output file name. Avoid overwriting existing files, etc.
 def get_output_filename(input_filename, args):
@@ -760,9 +796,64 @@ def first_second_every_minute(start : datetime.timedelta, duration : datetime.ti
         current_time += datetime.timedelta(minutes=1)
     return ';'.join(segments)
 
+# Format a timedelta into hh:mm:ss.ms
+def format_timedelta(ts : datetime.timedelta):
+    hours, rm_hr = divmod(ts.total_seconds(), 3600)
+    mins, rm_min = divmod(ts.total_seconds(), 60)
+    sec, rm_sec = divmod(ts.total_seconds(), 1)
+    ts_str = '{:02}:{:02}:{:02}.{:.2f}'.format(int(hours), int(mins), int(rm_min), rm_sec)
+    return ts_str
+
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
 
+    
+    if args.trim_silence is not None:
+        silence_segments = silencedetect(input_filename, start, duration)
+        if len(silence_segments) == 0:
+                print('No silence detected')
+        else:
+            # Simple start and end silence trimming involves moving the start and duration
+            trimmed_start = False
+            original_start = start
+            original_duration = duration
+            if args.trim_silence != SilenceTrimMode.end: # Trim start
+                silence_start, silence_end = silence_segments[0]
+                silence_gap = silence_start - start
+                # Allow for silence start to be slightly off from true start
+                if silence_gap.total_seconds() < 0.1:
+                    silence_duration = silence_end - silence_start
+                    start += silence_duration
+                    duration -= silence_duration
+                    trimmed_start = True
+                    print("Adjusted start time by {}".format(silence_duration))
+            trimmed_end = False
+            if args.trim_silence != SilenceTrimMode.start: # Trim end
+                silence_start, silence_end = silence_segments[-1]
+                silence_gap = (original_start + original_duration) - silence_end
+                # Allow for silence start to be slightly off from true start
+                if silence_gap.total_seconds() < 0.1:
+                    silence_duration = silence_end - silence_start
+                    duration -= silence_duration
+                    trimmed_end = True
+                    print("Adjusted end time by -{}".format(silence_duration))
+            # Complex silence trimming involves hijacking the cut feature
+            if args.trim_silence == SilenceTrimMode.all: # Trim in the middle
+                segment_strings = []
+                # Account for already cut segments from the begin and end
+                if trimmed_start:
+                    silence_segments = silence_segments[1:]
+                if trimmed_end:
+                    silence_segments = silence_segments[:-1]
+                for start_segment, end_segment in silence_segments:
+                    absolute_start = original_start + start_segment
+                    absolute_end = original_start + end_segment
+                    segment_strings.append(format_timedelta(absolute_start) + '-' + format_timedelta(absolute_end))
+                segments = ';'.join(segment_strings)
+                if args.cut is not None:
+                    print("Warning: '--cut' cannot be used in conjunction with '--trim_silence all'. Arguments will be overridden.")
+                args.cut = segments
+    # Segment trimming feature involves rendering a temporary file with trimmed segments
     if args.cut is not None or args.concat is not None or args.first_second_every_minute:
         if args.first_second_every_minute:
             args.concat = first_second_every_minute(start, duration)
@@ -777,11 +868,7 @@ def process_video(input_filename, start, duration, args, full_video):
         full_video = True
     
     # Duration check to make sure it will fit for the target board
-    if not args.no_duration_check:
-        duration_sec = duration.total_seconds()
-        duration_limit = max_duration[0] if str(args.board) == 'wsg' else max_duration[1]
-        if duration_sec > duration_limit:
-            raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
+    duration_check(duration, args.board, args.no_duration_check)
 
     if args.blackframe:
         frame_skip = blackframe(input_filename, start, duration)
@@ -1156,6 +1243,7 @@ if __name__ == '__main__':
         parser.add_argument('--sub_index', type=int, help="Subtitle index to burn-in (use --list_subs if you don't know the index)")
         parser.add_argument('--sub_lang', type=str, help="Subtitle language to burn-in, must be an exact match with what is listed in the file (use --list_subs if you don't know the language)")
         parser.add_argument('--sub_file', type=str, help='Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs)')
+        parser.add_argument('--trim_silence', type=SilenceTrimMode, choices=list(SilenceTrimMode), help="Skip silence using a first pass with silencedetect filter. Skip silence at the start, end, or cut all detected silence.")
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()
