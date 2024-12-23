@@ -16,7 +16,7 @@ Developed on Linux, probably works on Windows.
 - Audio track selection for multi-audio sources
 - Subtitle burn-in
 - Skip black frames at the start of a video
-- Automatically trim silence
+- Automatically trim silent portions of a video
 - Music mode optimized for songs
 - Combine static image with audio
 
@@ -89,7 +89,7 @@ Concatenate a segment from 1:00:05 to 1:00:10 and a segment from 1:28:30 to 1:28
 `python webm_for_4chan.py input.mp4 -s 1:00:00 -e 1:30:00 -c "1:00:05-1:00:10;1:28:30-1:28:45"`
 
 ### Trimming Silence
-You can automatically cut silence from the video using `--trim_silence`. There are 4 options:
+You can automatically cut silent portions of the video using `--trim_silence`. There are 4 options:
 - `--trim_silence start` trims the beginning of the video, advancing the specified start time
 - `--trim_silence end` trims the end of the video, reducing the specified end time or duration
 - `--trim_silence start_and_end` does both of the above
