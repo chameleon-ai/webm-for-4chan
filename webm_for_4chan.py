@@ -149,8 +149,8 @@ def scale_to_even(original_width, original_height, scaled_width, scaled_height):
     if scaled_height % 2 == 0:
         return int(max(scaled_width, scaled_height))
     # Search for new height
-    height = int(scaled_height)
-    width = int(scaled_width)
+    height = int(round(scaled_height))
+    width = int(round(scaled_width))
     next_height = height # A continually decreasing counter
     # Brute force and find a resolution that is even horizontally and veritcally
     while (next_height > 0) and ((height % 2 != 0) or (width % 2 != 0)):
@@ -1194,7 +1194,7 @@ def image_audio_combine(input_image, input_audio, args):
     return output
 
 def cleanup():
-    for filename in ['temp.opus', 'temp.aac', 'temp.normalized.opus', 'temp.normalized.aac', 'temp.ass', 'temp.mkv', 'ffmpeg2pass-0.log']:
+    for filename in ['temp.opus', 'temp.aac', 'temp.normalized.opus', 'temp.normalized.aac', 'temp.ass', 'temp.mkv', 'ffmpeg2pass-0.log', 'ffmpeg2pass-0.log.mbtree']:
         if os.path.isfile(filename):
             os.remove(filename)
 
