@@ -1135,8 +1135,8 @@ def image_audio_combine(input_image, input_audio, args):
     ffmpeg_args.extend(["-b:v", video_bitrate])
 
     # Video filters
-    # The decimate filter drops duplicated frames, which increases efficiency when using a static image: https://ffmpeg.org/ffmpeg-filters.html#decimate-1
-    vf_args = 'decimate' 
+    # Note: I used to include decimate because it saved size for gifs but it seems to cause a desync in the animation
+    vf_args = '' 
     if args.crop is not None:
         if vf_args != '':
             vf_args += ',' # Tack on to other args if string isn't empty
