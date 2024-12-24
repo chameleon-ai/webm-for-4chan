@@ -1127,7 +1127,10 @@ def image_audio_combine(input_image, input_audio, args):
         ffmpeg_args.extend(["-c:a", "libopus", '-b:a', audio_bitrate])
 
     # Output
-    vp9_args = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
+    keyframe_interval = duration.total_seconds()
+    # -g sets the maximum keyframe interval. Setting this to the duration of the song causes a slight size reduction.
+    # https://ffmpeg.org/ffmpeg-codecs.html#libvpx
+    vp9_args = ["-c:v", "libvpx-vp9", "-g", str(keyframe_interval), "-deadline", 'good' if args.fast else args.deadline]
     ffmpeg_args.extend(vp9_args)
     ffmpeg_args.extend(["-b:v", video_bitrate])
 
