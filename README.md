@@ -19,6 +19,7 @@ Developed on Linux, probably works on Windows.
 - Automatically trim silent portions of a video
 - Music mode optimized for songs
 - Combine static image with audio
+- Surround to stereo mixdown
 
 ## How Does it Work?
 It's a simple wrapper for ffmpeg. A precise file size is determined by first rendering the audio, then calculating a target video bit-rate in kbps using the remaining space not taken up by the audio. Then, using 2-pass encoding, it's up to ffmpeg to hit the target size exactly. It's usually very good at hitting the target size without going over, but it's not perfect.
@@ -105,6 +106,7 @@ Manually set the file size limit, in MiB, with `--size`, i.e. `--size 5` will ta
 ### Miscellaneous Features
 Make an .mp4 instead  of .webm with the `--mp4` flag or `--codec libx264`\
 Enable audio volume normalization with `--normalize` or `-n`\
+Enable stereo mixdown with `--stereo`\
 Skip black frames at the start of the video with `--blackframe`\
 Crop using automatic edge detection with `--auto_crop`\
 Crop using manually specified boundaries with `--crop`\
@@ -118,6 +120,7 @@ Type `--help` for a complete list of commands.
 
 ## Extra Notes and Quirks
 - Audio bit-rate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`, or specify the exact rate manually with `--audio_rate`
+- If your source is surround sound, it's highly recommended to use `--music_mode` or `--stereo` especially for clips over 2:00. The default audio bit-rate is meant for stereo and can cause surround sources to sound too crunchy.
 - Image + audio combine mode behaves as if in `--music_mode`. You can still manually specify `--audio_rate`
 - Fps cap is automatically reduced for long clips. You can manually specify with `--fps`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.

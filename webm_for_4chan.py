@@ -309,7 +309,7 @@ def get_audio_layout(input_filename : str, track : int):
 # Simply renders the audio to file and gets its size.
 # This is the most precise way of knowing the final audio size and rendering this takes a fraction of the time it takes to render the video.
 # Returns a tuple containing the audio bit rate, normalization parameters if applicable, the surround workaround filter if applicable, and a special flag if no audio streams were found
-def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode, acodec : str, normalize):
+def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode : BoardMode, acodec : str, stereo_mixdown : bool, normalize : bool):
     if str(mode) == 'wsg' or str(mode) == 'gif':
         surround_workaround = False # For working around a known bug in libopus: https://trac.ffmpeg.org/ticket/5718
         surround_workaround_args = None
@@ -319,6 +319,9 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
         ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', acodec, '-b:a', audio_bitrate]
         if track is not None: # Optional audio track selection
             ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
+        # https://superuser.com/questions/852400/properly-downmix-5-1-to-stereo-using-ffmpeg
+        if stereo_mixdown:
+            ffmpeg_cmd.extend(['-ac', '2'])
         ffmpeg_cmd1 = ffmpeg_cmd.copy()
         ffmpeg_cmd1.append(output)
         result = subprocess.run(ffmpeg_cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -704,7 +707,7 @@ def get_output_filename(input_filename, args):
                 return final_output
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mode : BoardMode, dry_run : bool):
+def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, stereo_mixdown : bool, mode : BoardMode, dry_run : bool):
     ffmpeg_args = ["ffmpeg", '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments
@@ -750,6 +753,8 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
             if len(audio_tracks.items()) > 1:
                 print('Multiple audio tracks detected, selecting track 0.')
                 pass2.extend(['-map', '0:v:0', '-map', '0:a:0'])
+        if stereo_mixdown:
+            pass2.extend(['-ac', '2'])
         af_args = ''
         for filter in audio_filters: # Apply miscellaneous filters
             if af_args != '':
@@ -907,6 +912,8 @@ def process_video(input_filename, start, duration, args, full_video):
     if args.no_audio or str(args.board) == 'other':
         no_audio = True
     else:
+        if args.stereo:
+            print('Stereo mixdown enabled.')
         print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
         audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.board)
         audio_bitrate = '{}k'.format(audio_kbps)
@@ -914,7 +921,7 @@ def process_video(input_filename, start, duration, args, full_video):
         print('Calculating audio size')
         # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
         acodec = 'libopus' if args.codec == 'libvpx-vp9' else 'aac'
-        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.board, acodec, args.normalize)
+        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.board, acodec, args.stereo, args.normalize)
         print('Audio size: {}kB'.format(int(audio_size/1024)))
     size_limit = get_size_limit(args)
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
@@ -1037,7 +1044,7 @@ def process_video(input_filename, start, duration, args, full_video):
         audio_codec = ["-c:a", "aac", '-b:a', audio_bitrate]
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.board, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.stereo, args.board, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -1089,7 +1096,8 @@ def image_audio_combine(input_image, input_audio, args):
     audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, True, args.board)
     audio_bitrate = '{}k'.format(audio_kbps)
     print(audio_bitrate)
-
+    if args.stereo:
+        print('Stereo mixdown enabled.')
     print('Calculating audio size')
     audio_size = 0
     audio_copy = False
@@ -1098,7 +1106,7 @@ def image_audio_combine(input_image, input_audio, args):
         audio_copy = True
         audio_size = os.path.getsize(input_audio)
     else:
-        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, 'libopus', args.normalize)
+        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, 'libopus', args.stereo, args.normalize)
         if no_audio:
             raise RuntimeError('Unable to complete image + audio combine mode. No audio stream found.')
     print('Audio size: {}kB'.format(int(audio_size/1024)))
@@ -1125,12 +1133,19 @@ def image_audio_combine(input_image, input_audio, args):
         ffmpeg_args.extend(['-c:a', 'copy'])
     else:
         ffmpeg_args.extend(["-c:a", "libopus", '-b:a', audio_bitrate])
+    if args.stereo:
+        ffmpeg_args.extend(["-ac", "2"])
 
     # Output
     keyframe_interval = duration.total_seconds()
-    # -g sets the maximum keyframe interval. Setting this to the duration of the song causes a slight size reduction.
+
     # https://ffmpeg.org/ffmpeg-codecs.html#libvpx
-    vp9_args = ["-c:v", "libvpx-vp9", "-g", str(keyframe_interval), "-deadline", 'good' if args.fast else args.deadline]
+    vp9_args = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
+    # -g sets the maximum keyframe interval. Setting this to the duration of the song causes a slight size reduction.
+    # It's possible that there is no detrimental effect to setting this for gif, but I err on the side of caution
+    # in case it produces an undesirable side-effect. For static images though, only one keyframe is needed.
+    if image_subtype != 'gif':
+        vp9_args.extend(["-g", str(keyframe_interval)])
     ffmpeg_args.extend(vp9_args)
     ffmpeg_args.extend(["-b:v", video_bitrate])
 
@@ -1245,6 +1260,7 @@ if __name__ == '__main__':
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
         parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
         parser.add_argument('--size', '--limit', dest='size', type=float, help='Target file size limit, in MiB. Default is 6 if board is wsg, and 4 otherwise.')
+        parser.add_argument('--stereo', action='store_true', help="Do stereo mixdown if the source is surround sound.")
         parser.add_argument('--sub_index', type=int, help="Subtitle index to burn-in (use --list_subs if you don't know the index)")
         parser.add_argument('--sub_lang', type=str, help="Subtitle language to burn-in, must be an exact match with what is listed in the file (use --list_subs if you don't know the language)")
         parser.add_argument('--sub_file', type=str, help='Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs)')
