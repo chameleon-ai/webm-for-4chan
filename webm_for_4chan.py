@@ -19,7 +19,7 @@ import traceback
 
 max_bitrate = 2800 # (kbps) Cap bitrate in case the clip is really short. This is already an absurdly high rate.
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
-max_duration = [400, 120] # Maximum clip durations, in seconds [wsg, all other boards]
+max_duration = [400, 300, 120] # Maximum clip durations, in seconds [wsg, gif, all other boards]
 resolution_table = [480, 576, 640, 736, 854, 960, 1024, 1280, 1440, 1600, 1920, 2048] # Table of discrete resolutions
 audio_bitrate_table = [12, 24, 32, 40 , 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512] # Table of discrete audio bit-rates
 resolution_fallback_map = { # This time-based lookup is used if smart resolution calculation fails for some reason
@@ -133,7 +133,11 @@ class SilenceTrimMode(Enum):
 def duration_check(duration : datetime.timedelta, board : BoardMode, no_duration_check : bool):
     if not no_duration_check:
         duration_sec = duration.total_seconds()
-        duration_limit = max_duration[0] if str(board) == 'wsg' else max_duration[1]
+        duration_limit = max_duration[0] # wsg
+        if board == BoardMode.gif:
+            duration_limit = max_duration[1] # gif
+        elif board == BoardMode.other: # all other boards
+            duration_limit = max_duration[2]
         if duration_sec > duration_limit:
             raise ValueError("Error: Specified duration {} seconds exceeds maximum {} seconds".format(duration_sec, duration_limit))
 
@@ -1226,7 +1230,7 @@ if __name__ == '__main__':
         parser.add_argument('-o', '--output', type=str, help='Output File name (default output is named after the input prepended with "_1_")')
         parser.add_argument('-s', '--start', type=str, default='0.0', help='Start timestamp, i.e. 0:30:5.125')
         parser.add_argument('-e', '--end', type=str, help='End timestamp, i.e. 0:35:0.000')
-        parser.add_argument('-d', '--duration', type=str, help='Clip duration (maximum {} seconds in wsg mode and {} seconds otherwise), i.e. 1:15.000'.format(max_duration[0], max_duration[1]))
+        parser.add_argument('-d', '--duration', type=str, help='Clip duration (maximum {} seconds in wsg mode, {} for gif, {} seconds otherwise), i.e. 1:15.000'.format(max_duration[0], max_duration[1], max_duration[2]))
         parser.add_argument('-b', '--bitrate_compensation', default=0, type=int, help='Fixed value to subtract from target bitrate (kbps). Use if your output size is overshooting')
         parser.add_argument('-n', '--normalize', action='store_true', help='Enable 2-pass audio normalization.')
         parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")

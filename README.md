@@ -98,7 +98,7 @@ You can automatically cut silent portions of the video using `--trim_silence`. T
 
 ### Changing Target Size and Removing Sound
 By default, the script renders up to 6MiB, 400 seconds with sound for wsg.\
-To set the size limit to 4MiB, 120 seconds with sound, use `--board gif`\
+To set the size limit to 4MiB, 300 seconds with sound, use `--board gif`\
 To set the size limit to 4MiB, 120 seconds with no sound, use `--board other`\
 Remove sound altogether with `--no_audio`\
 Manually set the file size limit, in MiB, with `--size`, i.e. `--size 5` will target a 5 MiB file.
@@ -131,8 +131,8 @@ Type `--help` for a complete list of commands.
 - Dynamic resolution calculation will snap to a standard resolution size as defined in the resolution table. You can skip this with `--bypass_resolution_table`
 - The resolution calculation method can be altered with `--resize_mode`. All options produce similar results, but `--resize_mode cubic` usually results in lower resolutions than the default of `logarithmic`. Instead of a bit-rate based calculation, a time-based lookup table can also be used with `--resize_mode table`. Note that this doesn't alter how ffmpeg resizes the video, it only affects what target resolution is chosen.
 - If you want to see the calculations and ffmpeg commands without rendering the clip, use `--dry_run`
-- The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.
-- You will get an error if you try to render a clip longer than the max duration of the target board (400 seconds for wsg and 120 seconds otherwise). This can be disabled with `--no_duration_check`, but will result in a file not uploadable to 4chan. The max duration bypass hack for 4chan is not supported as it results in a corrupted file.
+- The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `-b`/`--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.
+- You will get an error if you try to render a clip longer than the max duration of the target board. This can be disabled with `--no_duration_check`, but will result in a file not uploadable to 4chan. The max duration bypass hack for 4chan is not supported as it results in a corrupted file.
 - The vp9 encoder's deadline argument is set to `good` by default. Better quality, but much slower, encoding can be achieved with `--deadline best`
 - Use `--fast` to significantly speed up encoding at the expense of quality and rate control accuracy.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
