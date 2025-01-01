@@ -40,12 +40,15 @@ The output will be the name of the input prepended with `_1_`, i.e. `_1_input.we
 Use `--output` to specify a custom file name.
 
 ### Clipping
-Use `-s`/`--start` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.
+Use `-s`/`--start` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.\
+Or specify `-c` to specify a segment (see section on Cutting or Concatenating Segments below).
 
 Clip the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
-`python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`
+`python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`\
+Note that using `-c` with one segment is equivalent:\
+`python webm_for_4chan.py input.mp4 -c "1:23:45.1-1:24:56.6"`
 
-Or specify a relative 2 minute duration using `-d`/`--duration`:\
+Specify a relative 2 minute duration using `-d`/`--duration`:\
 `python webm_for_4chan.py input.mp4 -s 1:23:45.1 -d 2:00`
 
 Start time is 0:00 by default, so you can render the first minute of the clip like this:\
@@ -67,7 +70,7 @@ Use external subtitles:\
 `python webm_for_4chan.py input.mkv --sub_file "input.en.ssa"`
 
 ### Cutting or Concatenating Segments
-You can trim the video using 2 different methods: `-x`/`--cut` and `-c`/`--concat`\
+You can trim the video using 2 different methods: `-x`/`--cut` and `-c`/`--concat`/``--clip`\
 Cut means that the specified segments will be removed.\
 Concat means that only the specified segments will be kept (the opposite of cut)
 - Specify segments using a timestamp range, i.e. `"1:00-2:00"`

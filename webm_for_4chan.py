@@ -818,7 +818,6 @@ def format_timedelta(ts : datetime.timedelta):
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
 
-    
     if args.trim_silence is not None:
         silence_segments = silencedetect(input_filename, start, duration)
         if len(silence_segments) == 0:
@@ -864,6 +863,18 @@ def process_video(input_filename, start, duration, args, full_video):
                 if args.cut is not None:
                     print("Warning: '--cut' cannot be used in conjunction with '--trim_silence all'. Arguments will be overridden.")
                 args.cut = segments
+
+    # Special case of only one concat segment (clip mode), which is logically equivalent to only adjusting start and duration
+    if args.concat is not None:
+        concat_segments = parse_segments(start, args.concat)
+        if len(concat_segments) == 1:
+            seg_start, seg_end = concat_segments[0]
+            start += seg_start
+            duration = seg_end - seg_start
+            full_video = False # Since start and end have been adjusted, it's no longer eligible for full video mode
+            print('clip start: {}'.format(start))
+            print('clip duration: {}'.format(duration))
+            args.concat = None  # Clear out the concat arg. There is nothing to concat with one segment.
     # Segment trimming feature involves rendering a temporary file with trimmed segments
     if args.cut is not None or args.concat is not None or args.first_second_every_minute:
         if args.first_second_every_minute:
@@ -1236,7 +1247,7 @@ if __name__ == '__main__':
         parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")
         parser.add_argument('-a', '--audio_filter', type=str, help="Audio filter arguments. This string is passed directly to the -af chain.")
         parser.add_argument('-v', '--video_filter', type=str, help="Video filter arguments. This string is passed directly to the -vf chain.")
-        parser.add_argument('-c', '--concat', type=str, help='Segments to concatenate (everything else is cut), separated by ";", i.e. "5:00-5:15;5:45-5:52.4"')
+        parser.add_argument('-c', '--concat', '--clip', dest='concat', type=str, help='Segments to concatenate (everything BUT these are cut), separated by ";", i.e. "5:00-5:15;5:45-5:52.4"')
         parser.add_argument('-x', '--cut', type=str, help='Segments to cut (opposite of concatenate), separated by ";", i.e. "5:00-5:15;5:45-5:52.4"')
         parser.add_argument('-k', '--keep_temp_files', action='store_true', help="Keep temporary files generated during size calculation etc.")
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
