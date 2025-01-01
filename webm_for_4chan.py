@@ -67,6 +67,8 @@ bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This val
 }
 null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1 and certain preprocessing steps, need to output to appropriate null depending on system
 
+files_to_clean = [] # List of temp files to be cleaned up at the end
+
 # Determine size limit in bytes
 def get_size_limit(args):
     # Manual size override
@@ -74,6 +76,17 @@ def get_size_limit(args):
         return args.size * 1024 * 1024
     else:
         return max_size[0] if str(args.board) == 'wsg' else max_size[1] # Look up the size cap depending on the board it's destined for
+
+# Find a filename with a given extension
+def get_temp_filename(extension : str):
+    basename = 'temp'
+    filename = '{}.{}'.format(basename,extension)
+    x = 0
+    while os.path.isfile(filename):
+        x += 1
+        filename = '{}.{}.{}'.format(basename,x,extension)
+    return filename
+
 
 # This is only called if you don't specify a duration or end time. Uses ffprobe to find out how long the input is.
 def get_video_duration(input_filename, start_time : float):
@@ -317,7 +330,9 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
     if str(mode) == 'wsg' or str(mode) == 'gif':
         surround_workaround = False # For working around a known bug in libopus: https://trac.ffmpeg.org/ticket/5718
         surround_workaround_args = None
-        output = 'temp.opus' if acodec == 'libopus' else 'temp.aac'
+        output_ext = 'opus' if acodec == 'libopus' else 'aac'
+        output = get_temp_filename(output_ext)
+        files_to_clean.append(output)
         if os.path.isfile(output):
             os.remove(output)
         ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', acodec, '-b:a', audio_bitrate]
@@ -389,7 +404,9 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 params = find_json(result.stderr)
             if params is not None:
                 print('Normalizing audio (2nd pass)')
-                output2 = 'temp.normalized.opus' if acodec == 'libopus' else 'temp.normalized.aac'
+                output2_ext = 'normalized.opus' if acodec == 'libopus' else 'normalized.aac'
+                output2 = get_temp_filename(output2_ext)
+                files_to_clean.append(output2)
                 if os.path.isfile(output2):
                     os.remove(output2)
                 # The size of the normalized audio is different from the initial one, so render to get the exact size
@@ -579,7 +596,8 @@ def segment_video(input_filename : str, start, duration, full_video : bool, args
     ffmpeg_args.extend(["-c:a", "libopus", "-b:a", "512k"])
     
     # Output file
-    output_filename = 'temp.mkv'
+    output_filename = get_temp_filename('mkv')
+    files_to_clean.append(output_filename)
     ffmpeg_args.append(output_filename)
     print('Rendering cut video...')
     print(' '.join(ffmpeg_args))
@@ -1039,12 +1057,14 @@ def process_video(input_filename, start, duration, args, full_video):
     video_codec = []
     if args.codec == 'libvpx-vp9':
         video_codec = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
+        files_to_clean.append('ffmpeg2pass-0.log') # This is the pass 1 file for vp9
         if args.fast:
             video_codec.extend(["-cpu-used", "5"]) # By default, this is 0, 5 means worst quality but fastest
         if not args.no_mt: # Enable multithreading
             video_codec.extend(["-row-mt", "1"])
     elif args.codec == 'libx264':
         video_codec = ["-c:v", "libx264", "-preset", 'fast' if args.fast else 'slower']
+        files_to_clean.append('ffmpeg2pass-0.log.mbtree') # This is the pass 1 file for h264
     else:
         raise RuntimeError("Invalid codec option '{}'".format(args.codec))
     print('Target bitrate: {}'.format(video_bitrate))
@@ -1227,7 +1247,7 @@ def image_audio_combine(input_image, input_audio, args):
     return output
 
 def cleanup():
-    for filename in ['temp.opus', 'temp.aac', 'temp.normalized.opus', 'temp.normalized.aac', 'temp.ass', 'temp.mkv', 'ffmpeg2pass-0.log', 'ffmpeg2pass-0.log.mbtree']:
+    for filename in files_to_clean:
         if os.path.isfile(filename):
             os.remove(filename)
 

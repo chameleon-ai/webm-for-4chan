@@ -142,6 +142,7 @@ Type `--help` for a complete list of commands.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
 - With `--mp4`/`--codec libx264`, 'temp.aac' and 'temp.normalized.aac' are generated instead of .opus files.
+- If any temp files already exist (such as when using `-k` or killing the script prematurely), a new one will be made with an incrementing number (temp.1.opus, temp.2.opus, etc.)
 - Expect size overshoots much more often with `--mp4`/`--codec libx264`. This is a result of libx264's rate control accuracy being much more sloppy than libvpx-vp9.
 - When using `-x`/`--cut` or `-c`/`--concat`, a lossless temporary file of the assembled segments called 'temp.mkv' gets generated.
 - When using `-x`/`--cut` or `-c`/`--concat` it is currently not possible to burn-in subtitles or to specify an audio track besides the default.
