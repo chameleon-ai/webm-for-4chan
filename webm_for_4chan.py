@@ -997,7 +997,8 @@ def process_video(input_filename, start, duration, args, full_video):
         # For some reason, using the subs embedded in the source file causes inconsistent results, but this approach seems to work reliably with clips.
         if sub_idx is not None:
             print("Exporting embedded subtitles to temp file")
-            output_subs = 'temp.ass'
+            output_subs = get_temp_filename('ass')
+            files_to_clean.append(output_subs)
             if os.path.exists(output_subs):
                 os.remove(output_subs)
             result = subprocess.run(['ffmpeg', '-i', input_filename, '-map', '0:s:{}'.format(sub_idx), output_subs], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
