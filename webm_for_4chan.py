@@ -481,7 +481,7 @@ def list_audio(input_filename):
         raise RuntimeError('ffprobe returned code {}'.format(result.returncode))
 
 # Parse cut/concat segment timestamps
-def parse_segments(start, segments : str):
+def parse_segments(start, segments : str, do_print = True):
     parsed_segments = []
     for segment in segments.split(';'):
         segment_start, segment_end = segment.split('-')
@@ -491,7 +491,8 @@ def parse_segments(start, segments : str):
             raise RuntimeError('Segment {}-{} starts before the start time of {}'.format(absolute_start, absolute_end, start))
         relative_start = absolute_start - start
         relative_end = absolute_end - start
-        print('Identified segment: {}-{}'.format(absolute_start, absolute_end))
+        if do_print:
+            print('Identified segment: {}-{}'.format(absolute_start, absolute_end))
         parsed_segments.append((relative_start, relative_end))
     return parsed_segments
 
@@ -884,7 +885,7 @@ def process_video(input_filename, start, duration, args, full_video):
 
     # Special case of only one concat segment (clip mode), which is logically equivalent to only adjusting start and duration
     if args.concat is not None:
-        concat_segments = parse_segments(start, args.concat)
+        concat_segments = parse_segments(start, args.concat, do_print=False)
         if len(concat_segments) == 1:
             seg_start, seg_end = concat_segments[0]
             start += seg_start
