@@ -13,7 +13,9 @@ import math
 import mimetypes
 import os
 import platform
+import signal
 import subprocess
+import sys
 import time
 import traceback
 
@@ -1248,13 +1250,19 @@ def image_audio_combine(input_image, input_audio, args):
             print('WARNING: Output size exceeded target maximum {}. You should rerun with --bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
     return output
 
+do_cleanup = True
 def cleanup():
-    for filename in files_to_clean:
-        if os.path.isfile(filename):
-            os.remove(filename)
+    if do_cleanup:
+        for filename in files_to_clean:
+            if os.path.isfile(filename):
+                os.remove(filename)
+
+def signal_handler(sig, frame):
+    cleanup()
 
 if __name__ == '__main__':
     try:
+        signal.signal(signal.SIGINT, signal_handler)
         parser = argparse.ArgumentParser(
             prog='4chan Webm Converter',
             description='Attempts to fit video clips into the 4chan size limit',
@@ -1305,6 +1313,8 @@ if __name__ == '__main__':
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()
+        if args.keep_temp_files:
+            do_cleanup = False
         if args.mp4: # Use this shortcut flag to override the --codec option
             args.codec = 'libx264'
         input_filename = None
@@ -1322,8 +1332,7 @@ if __name__ == '__main__':
                     raise RuntimeError("Couldn't identify audio source from input files.")
                 result = image_audio_combine(image_input, audio_input, args)
                 print('output file: "{}"'.format(result))
-                if not args.dry_run and not args.keep_temp_files:
-                    cleanup()
+                cleanup()
                 exit(0)
             elif len(unknown_args) > 2:
                 print("Too many input arguments. Please specify only 1 or 2 inputs.")
@@ -1369,8 +1378,7 @@ if __name__ == '__main__':
             print('duration:', duration)
             result = process_video(input_filename, start_time, duration, args, full_video)
             print('output file: "{}"'.format(result))
-            if not args.dry_run and not args.keep_temp_files:
-                cleanup()
+            cleanup()   
         else:
             print('Input file not found: "' + input_filename + '"')
     except argparse.ArgumentError as e:

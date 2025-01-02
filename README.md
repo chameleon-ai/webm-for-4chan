@@ -118,7 +118,8 @@ Automatically burn-in the first available subtitles, if any exist, with `--auto_
 Print available built-in subtitles with  `--list_subs`\
 Print available audio tracks with  `--list_audio`\
 Specify arbitrary filters for ffmpeg with `-a`/`--audio_filter` and `-v`/`--video_filter`\
-For fun, try `--first_second_every_minute`, inspired by the youtube channel FirstSecondEveryMinute (Warning: This can take a while)
+For fun, try `--first_second_every_minute`, inspired by the youtube channel FirstSecondEveryMinute (Warning: This can take a while)\
+Keep generated temp files with `-k`/`--keep_temp_files`
 
 Type `--help` for a complete list of commands.
 
@@ -142,7 +143,7 @@ Type `--help` for a complete list of commands.
 - Row based multithreading is enabled by default. This can be disabled with `--no_mt`
 - You may notice an additional file 'temp.opus'. This is an intermediate audio file used for size calculation purposes. If normalization is enabled, 'temp.normalized.opus' will also be generated.
 - With `--mp4`/`--codec libx264`, 'temp.aac' and 'temp.normalized.aac' are generated instead of .opus files.
-- If any temp files already exist (such as when using `-k` or killing the script prematurely), a new one will be made with an incrementing number (temp.1.opus, temp.2.opus, etc.)
+- If any temp files already exist (such as when using `-k`), a new one will be made with an incrementing number (temp.1.opus, temp.2.opus, etc.)
 - Expect size overshoots much more often with `--mp4`/`--codec libx264`. This is a result of libx264's rate control accuracy being much more sloppy than libvpx-vp9.
 - When using `-x`/`--cut` or `-c`/`--concat`, a lossless temporary file of the assembled segments called 'temp.mkv' gets generated.
 - When using `-x`/`--cut` or `-c`/`--concat` it is currently not possible to burn-in subtitles or to specify an audio track besides the default.
@@ -153,7 +154,7 @@ Type `--help` for a complete list of commands.
 - You may notice that rendering is significantly slower when burning in subtitles. I tried many different settings and ffmpeg is very fragile, this is the only method I could figure out that works consistently.
 
 ## Tips, Tricks, and References
-- If you're unsure about your `-s`/`--start` and `-e`/`--end` timestamps, try a `--dry_run` and inspect temp.opus to see if the audio is the right slice that you want.
+- If you're unsure about your `-s`/`--start` and `-e`/`--end` timestamps, try a `--dry_run -k` and inspect temp.opus to see if the audio is the right slice that you want.
 - For long videos (over about 3 minutes), it's usually beneficial to add `-v spp`
   - https://ffmpeg.org/ffmpeg-filters.html#spp-1
 - Filter graph building for `-c`/`--concat` and `-x`/`--cut` were made possible through this valuable reference:
