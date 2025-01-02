@@ -37,7 +37,7 @@ Combine a static image (or animated gif) with audio:\
 `python webm_for_4chan.py image.png song.mp3`
 
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
-Use `--output` to specify a custom file name.
+Use `-o`/`--output` to specify a custom file name.
 
 ### Clipping
 Use `-s`/`--start` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.\
