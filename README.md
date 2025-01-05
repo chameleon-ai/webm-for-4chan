@@ -29,6 +29,12 @@ As long as you have python, you're good to go. No requirements.txt needed.\
 This script just uses the python standard library and makes system calls to ffmpeg and ffprobe.\
 Make sure ffmpeg and ffprobe are accessible from your path, that's it.
 
+On Linux, I recommend adding an alias for easy access, something like this:\
+`alias webm-for-4chan="python /path/to/webm-for-4chan/webm_for_4chan.py"`
+
+On Windows, you can drag-and-drop the video onto a .bat file containing the following line:\
+`python C:\path\to\webm-for-4chan\webm_for_4chan.py "%~1"`
+
 ## Usage
 If the video is already clipped and ready to be converted, simply:\
 `python webm_for_4chan.py input.mp4`
