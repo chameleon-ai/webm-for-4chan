@@ -67,6 +67,8 @@ bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This val
     360.0: 2,
     400.0: 4
 }
+mixdown_stereo_threshold = 96 # Automatically mixdown to stereo if audio bitrate <= this value
+mixdown_mono_threshold = 56 # Automatically mixdown to mono if audio bitrate <= this value
 null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1 and certain preprocessing steps, need to output to appropriate null depending on system
 
 files_to_clean = [] # List of temp files to be cleaned up at the end
@@ -146,6 +148,7 @@ class SilenceTrimMode(Enum):
 
 # Different sound mixdown options
 class MixdownMode(Enum):
+    auto = 'auto'
     stereo = 'stereo'
     mono = 'mono'
     same_as_source = 'same_as_source'
@@ -595,7 +598,7 @@ def segment_video(input_filename : str, start, duration, full_video : bool, args
     if args.auto_subs is True or args.sub_index is not None or args.sub_lang is not None or args.sub_file is not None:
         raise RuntimeError("--cut/--concat is not compatible with subtitle burn-in.")
     # Can't use 5.1 side surround sound when making a cut due to the libopus bug
-    layout = get_audio_layout(input_filename, 0)
+    layout, no_audio = get_audio_layout(input_filename, 0)
     if '5.1(side)' in layout:
         raise RuntimeError("5.1(side) surround sound detected. --cut is not compatible with this audio track.")
 
@@ -852,6 +855,32 @@ def format_timedelta(ts : datetime.timedelta):
     ts_str = '{:02}:{:02}:{:02}.{:.2f}'.format(int(hours), int(mins), int(rm_min), rm_sec)
     return ts_str
 
+def get_mixdown_mode(audio_kbps, audio_track, mixdown : MixdownMode):
+    if mixdown == MixdownMode.auto:
+        if audio_kbps <= mixdown_mono_threshold:
+            mixdown = MixdownMode.mono
+            try:
+                layout, no_audio = get_audio_layout(input_filename, audio_track if audio_track is not None else 0)
+                if not no_audio and layout == 'mono': # Use "same as source" mode if appropriate
+                    mixdown = MixdownMode.same_as_source
+            except:
+                pass # Skip this if there's an error. There's no harm in forcing stereo mixdown.
+        elif audio_kbps <= mixdown_stereo_threshold:
+            mixdown = MixdownMode.stereo
+            try:
+                layout, no_audio = get_audio_layout(input_filename, audio_track if audio_track is not None else 0)
+                if not no_audio and (layout == 'stereo' or layout == 'mono'):  # Use "same as source" mode if appropriate
+                    mixdown = MixdownMode.same_as_source
+            except:
+                pass # Skip this if there's an error. There's no harm in forcing stereo mixdown.
+        else:
+            mixdown = MixdownMode.same_as_source
+    if mixdown is MixdownMode.same_as_source:
+        print('Audio mixdown: same as source') # print without underscores for readability
+    else:
+        print('Audio mixdown: {}'.format(mixdown))
+    return mixdown
+
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
 
@@ -964,12 +993,11 @@ def process_video(input_filename, start, duration, args, full_video):
     if args.no_audio or str(args.board) == 'other':
         no_audio = True
     else:
-        if args.mixdown is not MixdownMode.same_as_source:
-            print('{} mixdown enabled.'.format(args.mixdown))
         print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
         audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.board)
         audio_bitrate = '{}k'.format(audio_kbps)
         print(audio_bitrate)
+        args.mixdown = get_mixdown_mode(audio_kbps, audio_track, args.mixdown) # Determine mixdown, if any
         print('Calculating audio size')
         # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
         acodec = 'libopus' if args.codec == 'libvpx-vp9' else 'aac'
@@ -1151,8 +1179,7 @@ def image_audio_combine(input_image, input_audio, args):
     audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, True, args.board)
     audio_bitrate = '{}k'.format(audio_kbps)
     print(audio_bitrate)
-    if args.mixdown is not MixdownMode.same_as_source:
-        print('{} mixdown enabled.'.format(args.mixdown))
+    args.mixdown = get_mixdown_mode(audio_kbps, None, args.mixdown) # Determine mixdown, if any
     print('Calculating audio size')
     audio_size = 0
     audio_copy = False
@@ -1318,10 +1345,11 @@ if __name__ == '__main__':
         parser.add_argument('--mono', action='store_true', help="Do mono mixdown. Equivalent to --mixdown mono")
         parser.add_argument('--mp4', action='store_true', help="Make .mp4 instead of .webm (shortcut for --codec libx264)")
         parser.add_argument('--music_mode', action='store_true', help="Prioritize audio quality over visual quality.")
-        parser.add_argument('--mixdown', type=MixdownMode, default='same_as_source', choices=list(MixdownMode), help='Sound mixdown mode. Default = same_as_source')
+        parser.add_argument('--mixdown', type=MixdownMode, default='auto', choices=list(MixdownMode), help='Sound mixdown mode. Default = auto')
         parser.add_argument('--no_audio', action='store_true', help='Drop audio if it exists')
         parser.add_argument('--no_duration_check', action='store_true', help='Disable max duration check')
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
+        parser.add_argument('--no_mixdown', action='store_true', help='Disable automatic audio mixdown. Equivalent to --mixdown same_as_source.')
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
         parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
         parser.add_argument('--size', '--limit', dest='size', type=float, help='Target file size limit, in MiB. Default is 6 if board is wsg, and 4 otherwise.')
@@ -1337,10 +1365,12 @@ if __name__ == '__main__':
             do_cleanup = False
         if args.mp4: # Use this shortcut flag to override the --codec option
             args.codec = 'libx264'
-        if args.stereo:
+        if args.stereo: # Determine aliases for mixdown mode
             args.mixdown = MixdownMode.stereo
         if args.mono:
             args.mixdown = MixdownMode.mono
+        if args.no_mixdown:
+            args.mixdown = MixdownMode.same_as_source
         input_filename = None
         if args.size is not None and args.size > 6.0:
             print("Warning: Manual size limit is larger than 4chan's supported size of 6MiB!")

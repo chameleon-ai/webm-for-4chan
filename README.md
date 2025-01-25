@@ -8,6 +8,7 @@ Developed on Linux, probably works on Windows.
 - Precise size calculation, designed to render webms just under the size limit
 - Automatic resolution scaling
 - Automatic audio bit-rate reduction based on length
+- Automatic stereo or mono mixdown based on audio bit-rate
 - (optional) Automatic volume normalization
 - (optional) Automatic cropping
 - Precise clipping to the nearest millisecond
@@ -19,7 +20,6 @@ Developed on Linux, probably works on Windows.
 - Automatically trim silent portions of a video
 - Music mode optimized for songs
 - Combine static image with audio
-- Stereo and mono mixdown
 
 ## How Does it Work?
 It's a simple wrapper for ffmpeg. A precise file size is determined by first rendering the audio, then calculating a target video bit-rate in kbps using the remaining space not taken up by the audio. Then, using 2-pass encoding, it's up to ffmpeg to hit the target size exactly. It's usually very good at hitting the target size without going over, but it's not perfect.
@@ -116,9 +116,10 @@ Reduce the target bit-rate with `-b`/`--bitrate-compensation`, i.e. `-b 5` will 
 
 ### Miscellaneous Features
 Make an .mp4 instead  of .webm with the `--mp4` flag or `--codec libx264`\
-Enable audio volume normalization with `--normalize` or `-n`\
-Enable stereo mixdown with `--stereo` or `--mixdown stereo`\
-Enable mono mixdown with `--mono` or `--mixdown mono`\
+Enable audio volume normalization with `-n`/`--normalize`\
+Disable automatic audio mixdown with `--no_mixdown` or `--mixdown same_as_source`\
+Force stereo mixdown with `--stereo` or `--mixdown stereo`\
+Force mono mixdown with `--mono` or `--mixdown mono`\
 Skip black frames at the start of the video with `--blackframe`\
 Crop using automatic edge detection with `--auto_crop`\
 Crop using manually specified boundaries with `--crop`\
