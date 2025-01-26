@@ -1408,7 +1408,8 @@ if __name__ == '__main__':
             if args.list_audio:
                 tracks = list_audio(input_filename)
                 for idx, lang in tracks.items():
-                    print('{},{}'.format(idx, lang))
+                    layout, no_audio = get_audio_layout(input_filename, idx) # Also list layout
+                    print('{},{},{}'.format(idx, lang,layout))
                 exit(0)
             start_time = parsetime(args.start)
             print('start time:', start_time)
