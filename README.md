@@ -45,21 +45,35 @@ Combine a static image (or animated gif) with audio:\
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
 Use `-o`/`--output` to specify a custom file name.
 
+### Context Specific Arguments
+For advanced usage, use the standard command-line flags (`-b`, `-x`, `--auto_subs`, etc.)\
+However, the script will attempt to parse arguments without flags using context clues:
+- If the argument is a file, it's treated as the input filename (`python webm_for_4chan.py input.mp4`)
+- If the argument is a single timestamp, it's treated as a duration (`python webm_for_4chan.py input.mp4 30` is equivalent to `python webm_for_4chan.py input.mp4 -d 30`)
+- If the argument is two timestamps, the lesser is treated as the start time and the greater is the end time (`python webm_for_4chan.py input.mp4 30 45` is equivalent to `python webm_for_4chan.py input.mp4 -s 30 -e 45`)
+- If the argument is a timestamp segment (timestamps separated by a dash, `1:00-2:00`), it's treated as a `-c`/`--concat` segment. (`python webm_for_4chan.py input.mp4 30-45` is equivalent to `python webm_for_4chan.py input.mp4 -c 30-45`)
+
 ### Clipping
 Use `-s`/`--start` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.\
 Or specify `-c` to specify a segment (see section on Cutting or Concatenating Segments below).
 
 Clip the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
 `python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`
+Or using context specific arguments:\
+`python webm_for_4chan.py input.mp4 1:23:45.1 1:24:56.6`
 
 Note that using `-c` with one segment is equivalent:\
 `python webm_for_4chan.py input.mp4 -c "1:23:45.1-1:24:56.6"`
+Or using context specific arguments:\
+`python webm_for_4chan.py input.mp4 "1:23:45.1-1:24:56.6"`
 
 Specify a relative 2 minute duration using `-d`/`--duration`:\
 `python webm_for_4chan.py input.mp4 -s 1:23:45.1 -d 2:00`
 
 Start time is 0:00 by default, so you can render the first minute of the clip like this:\
-`python webm_for_4chan.py input.mp4 -d 1:00`
+`python webm_for_4chan.py input.mp4 -d 1:00`\
+Or using context specific arguments:\
+`python webm_for_4chan.py input.mp4 1:00`
 
 End time is also calculated if not specified, so to render from the 5:30 mark until the end of the video:\
 `python webm_for_4chan.py input.mp4 -s 5:30`

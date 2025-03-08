@@ -99,6 +99,33 @@ def get_video_duration(input_filename, start_time : float):
     duration_seconds = float(result.stdout)
     return datetime.timedelta(seconds=duration_seconds - start_time)
 
+# Determines if the argument is a parsable timestamp
+def is_timestamp(arg : str):
+    if arg.isnumeric():
+        return True
+    elif ':' in arg: # Argument could have hh:mm:ss format
+        for token in arg.split(':'):
+            if not is_timestamp(token):
+                return False
+        return True
+    else: # Attempt to parse the timestamp as a float
+        try:
+            float(arg)
+            return True
+        except ValueError:
+            return False
+
+# Determines if the argument is a segment (i.e. a collection of timestamps used by --cut or --concat)
+def is_segment(arg : str):
+    print('aa')
+    for tok in arg.split(';'): # Segments can be split by semicolon
+        if '-' not in tok:
+            return False # Segments need to be separated by a dash
+        for seg in tok.split('-'):
+            if not is_timestamp(seg):
+                return False
+    return True # Only true if all arguments pass as individual timestamps
+
 # Rudamentary timestamp parsing, the format is H:M:S.ms and hours/minutes/milliseconds can be omitted
 def parsetime(ts_input):
     ts = ts_input.split('.')
@@ -1376,9 +1403,9 @@ if __name__ == '__main__':
             print("Warning: Manual size limit is larger than 4chan's supported size of 6MiB!")
         if args.input is not None: # Input was explicitly specified
             input_filename = args.input
-        elif len(unknown_args) > 0: # Input was specified as an unknown argument
-            if len(unknown_args) == 2: # Try to detect music + static image assembly mode
-                print("2 inputs specified. Using image + audio combine mode.")
+        elif len(unknown_args) > 0: # Input was specified as an unknown argument, attempt smart context parsing
+            if len(unknown_args) == 2 and os.path.isfile(unknown_args[0]) and os.path.isfile(unknown_args[1]): # Try to detect music + static image assembly mode
+                print("2 input files specified. Using image + audio combine mode.")
                 image_input, audio_input = get_image_audio_inputs(unknown_args)
                 if image_input is None:
                     raise RuntimeError("Couldn't identify image source from input files.")
@@ -1388,10 +1415,40 @@ if __name__ == '__main__':
                 print('output file: "{}"'.format(result))
                 cleanup()
                 exit(0)
-            elif len(unknown_args) > 2:
-                print("Too many input arguments. Please specify only 1 or 2 inputs.")
-                exit(0)
-            input_filename = unknown_args[-1]
+            else:
+                timestamp_args = []
+                for arg in unknown_args:
+                    if os.path.isfile(arg):
+                        input_filename = arg
+                    elif is_timestamp(arg):
+                        timestamp_args.append(arg)
+                    elif is_segment(arg):
+                        args.concat = arg
+                        print('Treating {} as a --concat segment'.format(arg))
+                    else:
+                        print("Unable to parse argument: '{}'".format(arg))
+                        print('Please command-line flags to specify complex arguments')
+                        exit(0)
+            if len(timestamp_args) > 0:
+                if args.concat is not None:
+                    print('Unable to parse arguments. Concat segments cannot be used in conjuction with other unspecified timestamps.')
+                    exit(0)
+                if args.start != '0.0' or args.end is not None or args.duration is not None:
+                    print('Unable to parse arguments. Unspecified timestamps cannot be used in conjuction with --start, --end, or --duration.')
+                    exit(0)
+                if len(timestamp_args) == 1: # One timestamp is treated as a duration
+                    args.duration = timestamp_args[0]
+                elif len(timestamp_args) == 2: # Two timestamps imply a start and end
+                    parsed_ts_args = {x:parsetime(x) for x in timestamp_args} # Create dict where values are parsed timestamps
+                    args.start = min(parsed_ts_args, key=parsed_ts_args.get) # Assume min value is start time
+                    print('Treating {} as a --start time.'.format(args.start))
+                    args.end = max(parsed_ts_args, key=parsed_ts_args.get) # Assume max value is end time
+                    print('Treating {} as an --end time.'.format(args.end))
+                else:
+                    print('Argument parsing failed. Too many timestamps specified.')
+                    exit(0)
+            if input_filename is None:
+                print('No input filename found.')
         else:
             parser.print_help() # Can't identify the input file
             exit(0)
