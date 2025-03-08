@@ -58,12 +58,12 @@ Use `-s`/`--start` to specify a starting timestamp and `-e`/`--end` to specify a
 Or specify `-c` to specify a segment (see section on Cutting or Concatenating Segments below).
 
 Clip the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
-`python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`
+`python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`\
 Or using context specific arguments:\
 `python webm_for_4chan.py input.mp4 1:23:45.1 1:24:56.6`
 
 Note that using `-c` with one segment is equivalent:\
-`python webm_for_4chan.py input.mp4 -c "1:23:45.1-1:24:56.6"`
+`python webm_for_4chan.py input.mp4 -c "1:23:45.1-1:24:56.6"`\
 Or using context specific arguments:\
 `python webm_for_4chan.py input.mp4 "1:23:45.1-1:24:56.6"`
 
