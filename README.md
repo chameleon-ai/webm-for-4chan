@@ -20,6 +20,7 @@ Developed on Linux, probably works on Windows.
 - Automatically trim silent portions of a video
 - Music mode optimized for songs
 - Combine static image with audio
+- Add/replace audio without re-encoding video
 
 ## How Does it Work?
 It's a simple wrapper for ffmpeg. A precise file size is determined by first rendering the audio, then calculating a target video bit-rate in kbps using the remaining space not taken up by the audio. Then, using 2-pass encoding, it's up to ffmpeg to hit the target size exactly. It's usually very good at hitting the target size without going over, but it's not perfect.
@@ -41,6 +42,10 @@ If the video is already clipped and ready to be converted, simply:\
 
 Combine a static image (or animated gif) with audio:\
 `python webm_for_4chan.py image.png song.mp3`
+
+Replace the video's audio (or add audio to a video without sound):\
+`python webm_for_4chan.py --audio_replace video.webm audio.mp3`\
+Note that this is a special mode where the video is copied, not re-encoded. The duration is limited to the video length.
 
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
 Use `-o`/`--output` to specify a custom file name.

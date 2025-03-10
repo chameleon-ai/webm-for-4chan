@@ -1322,6 +1322,89 @@ def image_audio_combine(input_image, input_audio, args):
             print('WARNING: Output size exceeded target maximum {}. You should rerun with --bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
     return output
 
+# Figures out which input is video and which is audio. Returns the tuple (video, audio), which may be None if video or audio couldn't be found.
+def get_video_audio_inputs(args : list):
+    mime_types = [ mimetypes.guess_type(x) + (x,) for x in args ]
+    video = None
+    audio = None
+    for type, encoding, filename in mime_types:
+        if type is None:
+           raise RuntimeError("Unknown mime type for input file '{}'".format(filename))
+        # Possible mime types: https://www.iana.org/assignments/media-types/media-types.xhtml
+        category = type.split('/')[0]
+        if category == 'video':
+            video = filename
+        elif category == 'audio':
+            audio = filename
+        else:
+            raise RuntimeError("Unsupported mime type '{}' for input file '{}'".format(type, encoding, filename))
+    return video, audio
+
+def audio_replace(video_input, audio_input, args):
+    if args.duration is not None or args.start != '0.0' or args.end is not None:
+        print('Warning: start, end, and duration are not used in audio replace mode. Parameters will be ignored.')
+    if str(args.board) == 'other':
+        print("Warning: Mode 'other' is not supported in audio replace mode. Mode will be treated as 'gif'")
+        args.board = BoardMode.gif
+    if args.no_audio:
+        print("Warning: --no_audio flag will be ignored for audio replace mode.")
+    if args.cut is not None or args.concat is not None:
+        print("Warning: --concat and --cut are not supported in audio replace mode. Parameters will be ignored.")
+    # Create a temp file that has no sound
+    video_out_no_sound = get_temp_filename(os.path.splitext(video_input)[-1].replace('.',''))
+    files_to_clean.append(video_out_no_sound)
+    ffmpeg_cmd1 = ["ffmpeg", '-hide_banner', '-i', video_input, '-c:v', 'copy', '-an', video_out_no_sound]
+    result = subprocess.run(ffmpeg_cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0 or not os.path.isfile(video_out_no_sound):
+        print(' '.join(ffmpeg_cmd1))
+        print(result.stderr)
+        raise RuntimeError('Error rendering temp video. ffmpeg return code: {}'.format(result.returncode))
+    category, mimetype = mimetypes.guess_type(video_input)[0].split('/')
+    ffmpeg_args = ["ffmpeg", '-hide_banner', '-i', video_out_no_sound, '-i', audio_input, '-c:v', 'copy', '-c:a']
+    if mimetype == 'mp4':
+        print('Using mp4/aac')
+        args.codec = 'libx264'
+        ffmpeg_args.append('aac')
+    elif mimetype == 'webm':
+        print('Using webm/opus')
+        args.codec = 'libvpx-vp9'
+        ffmpeg_args.append('libopus')
+    else:
+        raise RuntimeError('Unsupported mime type {}/{}'.format(category, mimetype))
+    output_filename = get_output_filename(video_input, args)
+    vduration = get_video_duration(video_out_no_sound, 0.0)
+    print('Video duration: {}'.format(vduration))
+    aduration = get_video_duration(audio_input, 0.0)
+    print('Audio duration: {}'.format(aduration))
+    if aduration > vduration:
+        print('Warning: Audio duration is longer than video. Output will be truncated to video length.')
+    print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
+    audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(aduration, True, args.board)
+    audio_bitrate = '{}k'.format(audio_kbps)
+    print(audio_bitrate)
+    # Note that '-t' is to limit duration to the video length in case audio is longer
+    ffmpeg_args.extend(['-b:a', audio_bitrate, '-t', str(vduration.total_seconds()), output_filename])
+    print(' '.join(ffmpeg_args))
+    if not args.dry_run:
+        # Use popen so we can pend on completion
+        pope = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        for line in iter(pope.stderr.readline, ""):
+            if 'frame=' in line:
+                print('\r' + line.strip(), end='')
+            else:
+                print(line, end='')
+        pope.stderr.close()
+        pope.wait()
+        if pope.returncode != 0:
+            raise RuntimeError('ffmpeg returned code {}'.format(pope.returncode))
+    if os.path.isfile(output_filename):
+        out_size = os.path.getsize(output_filename)
+        print('output file size: {} KB'.format(int(out_size/1024)))
+        size_limit = get_size_limit(args)
+        if out_size > size_limit:
+            print('WARNING: Output size exceeded target maximum {}. Note that this mode does not re-encode video. Try a different video/audio candidate.'.format(int(size_limit/1024)))
+    return output_filename
+
 do_cleanup = True
 def cleanup():
     if do_cleanup:
@@ -1355,6 +1438,7 @@ if __name__ == '__main__':
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--audio_rate', type=int, choices=audio_bitrate_table, help='Manual audio bit-rate override (kbps)')
+        parser.add_argument('--audio_replace', action='store_true', help="Special mode that replaces the audio of a clip with other audio without modifying the video.")
         parser.add_argument('--auto_crop', action='store_true', help="Automatic crop using cropdetect.")
         parser.add_argument('--auto_subs', action='store_true', help="Automatically burn-in the first embedded subtitles, if they exist")
         parser.add_argument('--blackframe', action='store_true', help="Skip initial black frames using a first pass with blackframe filter.")
@@ -1401,6 +1485,18 @@ if __name__ == '__main__':
         input_filename = None
         if args.size is not None and args.size > 6.0:
             print("Warning: Manual size limit is larger than 4chan's supported size of 6MiB!")
+        if args.audio_replace:
+            if len(unknown_args) == 2 and os.path.isfile(unknown_args[0]) and os.path.isfile(unknown_args[1]):
+                print('Using audio replace mode.')
+                video_input, audio_input = get_video_audio_inputs(unknown_args)
+                if video_input is None:
+                    raise RuntimeError("Couldn't identify video source from input files.")
+                if audio_input is None:
+                    raise RuntimeError("Couldn't identify audio source from input files.")
+                result = audio_replace(video_input, audio_input, args)
+                print('output file: "{}"'.format(result))
+                cleanup()
+                exit(0)
         if args.input is not None: # Input was explicitly specified
             input_filename = args.input
         elif len(unknown_args) > 0: # Input was specified as an unknown argument, attempt smart context parsing
