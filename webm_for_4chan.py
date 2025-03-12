@@ -719,7 +719,7 @@ def cropdetect(input_filename, start, duration):
 
 def silencedetect(input_filename, start, duration):
     print('Running silencedetect')
-    result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-af', 'silencedetect', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-af', 'silencedetect=n=-50dB:d=1.4', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(result.stderr.decode())
         raise RuntimeError('ffmpeg returned code {}'.format(result.returncode))
@@ -877,9 +877,9 @@ def first_second_every_minute(start : datetime.timedelta, duration : datetime.ti
 # Format a timedelta into hh:mm:ss.ms
 def format_timedelta(ts : datetime.timedelta):
     hours, rm_hr = divmod(ts.total_seconds(), 3600)
-    mins, rm_min = divmod(ts.total_seconds(), 60)
-    sec, rm_sec = divmod(ts.total_seconds(), 1)
-    ts_str = '{:02}:{:02}:{:02}.{:.2f}'.format(int(hours), int(mins), int(rm_min), rm_sec)
+    mins, rm_min = divmod(rm_hr, 60)
+    sec, rm_sec = divmod(rm_min, 1)
+    ts_str = '{:02}:{:02}:{:02}.{:03}'.format(int(hours), int(mins), int(sec), int(rm_sec*1000))
     return ts_str
 
 def get_mixdown_mode(audio_kbps, audio_track, mixdown : MixdownMode):
