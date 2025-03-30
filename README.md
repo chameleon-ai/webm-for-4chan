@@ -28,7 +28,7 @@ If you want to only use the standard library, stick with the main branch.
 Usage is the same as the main branch, with extra flags
 
 ### Smart Mono Mixdown
-In an effort to safe space, audio analysis will be run that compares the two channels (if the input is stereo). If the channels are substantially identical, the audio will be mixed down to mono and the audio bitrate reduced. Further analysis will be run at different bitrates (from 80kbps to 32kbps) and if the audio quality hasn't substantially degraded, the bitrate will be reduced further. For inputs that are mostly talking and don't require high dynamic range, this can result in very low bitrates and thus very low audio sizes.
+In an effort to reduce file size, audio analysis will be run that compares the two channels (if the input is stereo). If the channels are substantially identical, the audio will be mixed down to mono and the audio bitrate reduced. Further analysis will be run at different bitrates (from 80kbps to 32kbps) and if the audio quality hasn't substantially degraded, the bitrate will be reduced further. For inputs that are mostly talking and don't require high dynamic range, this can result in very low bitrates and thus very low audio sizes.
 
 ### Vocal Trim
 - The `--vocal_trim` flag will run Ultimate Vocal Remover on the audio track and then split the video on silence detected in the vocal track.
