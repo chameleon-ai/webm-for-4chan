@@ -12,7 +12,7 @@ Each advanced feature module can also be run stand-alone on the command-line.
 ## Installation and Dependencies
 Note that the advanced feature branch needs a virtual environment and pytorch to function.\
 It also requires that the current working directory be the top of the webm-for-4chan directory as there are some hard-coded path assumptions.\
-If you want to only use the standard library, stich with the main branch.\
+If you want to only use the standard library, stick with the main branch.
 
 - Clone this repository and `cd` to the top level.
 - Clone the submodules using `git submodule update --init`. This should produce the `advanced/ultimatevocalremovergui` directory. (submodules are pointers to other repositories at a specific commit)
