@@ -1,5 +1,6 @@
 # webm-for-4chan Advanced Feature Branch
-THE ADVANCED FEATURE BRANCH IS HIGHLY EXPERIMENTAL! COMPATIBILITY IS NOT GUARANTEED FOR YOUR SYSTEM!
+THE ADVANCED FEATURE BRANCH IS HIGHLY EXPERIMENTAL!\
+COMPATIBILITY IS NOT GUARANTEED FOR YOUR SYSTEM!
 
 ## Advanced Features
 - Smart mono mixdown and audio bitrate calculation
@@ -13,7 +14,7 @@ It also requires that the current working directory be the top of the webm-for-4
 If you want to only use the standard library, stich with the main branch.\
 
 - Clone this repository and `cd` to the top level.
-- Clone the submodules using `git submodule update --init`. This should produce the `Amphion` and `ultimatevocalremovergui` directories. (submodules are pointers to other repositories at a specific commit)
+- Clone the submodules using `git submodule update --init`. This should produce the `advanced/ultimatevocalremovergui` directory. (submodules are pointers to other repositories at a specific commit)
 - Create and activate python virtual environment:
   - `python -m venv venv`
   - `source venv/bin/activate` or `venv\Scripts\activate.bat`
