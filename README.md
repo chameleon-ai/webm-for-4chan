@@ -41,6 +41,7 @@ In an effort to safe space, audio analysis will be run that compares the two cha
 
 ### BGM Swap
 - `--bgm_swap` functions similar to `--audio_replace` but uses UVR to replace only the instrumental track while preserving the vocals. Specify the path to the bgm you want to put in, i.e. `--bgm_swap file.mp3`
+  - `--bgm_gain` will adjust the volume of the bgm track in dB. Usually if you're using loud music over quiet talking I recommend something like `--bgm_gain -12`
   - Note that the input video stream is copied, not re-encoded. Only the audio is processed.
   - The standard method of calculating the output audio bitrate applies here. You can override it with `--music_mode` or `--audio_rate`.
 
