@@ -911,6 +911,25 @@ def get_mixdown_mode(audio_kbps, audio_track, mixdown : MixdownMode):
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
 
+    # ---- Advanced Feature ----
+    if args.vocal_trim:
+        from advanced.vocal_silence_trim import vocal_silence_trim
+        processed, temp_files = vocal_silence_trim(input_filename, start, duration, full_video, trim_mode= args.trim_mode, substitute_instrumental=args.substitute_instrumental, instrumental_gain = args.instrumental_gain)
+        files_to_clean.extend(temp_files)
+        files_to_clean.append(processed)
+        # Reset start and duration to process full newly generated temp video
+        # Cancel out incompatible flags
+        args.trim_silence = None
+        args.cut = None
+        args.concat = None
+        args.first_second_every_minute = False
+        input_filename = processed
+        start = datetime.timedelta(seconds=0.0)
+        duration = get_video_duration(input_filename, start.total_seconds())
+        print("Using cut file '{}', duration: {}".format(processed,duration))
+        full_video = True
+    # ---- End Advanced Feature ----
+
     if args.trim_silence is not None:
         silence_segments = silencedetect(input_filename, start, duration)
         if len(silence_segments) == 0:
@@ -1022,9 +1041,21 @@ def process_video(input_filename, start, duration, args, full_video):
     else:
         print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
         audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.board)
+        # ---- Start Advanced Feature ----
+        if args.mixdown is not None and args.mixdown == MixdownMode.auto:
+            from advanced.audio_analyze import calculate_cosine_similarity, calculate_bitrate_from_stoi
+            print('')
+            similarity, temp_files = calculate_cosine_similarity(input_filename, full_audio=full_video, start=start, duration=duration)
+            files_to_clean.extend(temp_files)
+            if similarity is not None and similarity > 0.9:
+                    print('High track similarity. Using mono mixdown.')
+                    args.mixdown = MixdownMode.mono
+                    if args.audio_rate is None: # Determine audio rate from stoi calculations unless user specified
+                        audio_kbps, more_temp_files = calculate_bitrate_from_stoi(input_filename, full_audio=full_video, start=start, duration=duration)
+                        files_to_clean.extend(more_temp_files)
+        # ---- End Advanced Feature ----
         audio_bitrate = '{}k'.format(audio_kbps)
         print(audio_bitrate)
-        args.mixdown = get_mixdown_mode(audio_kbps, audio_track, args.mixdown) # Determine mixdown, if any
         print('Calculating audio size')
         # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
         acodec = 'libopus' if args.codec == 'libvpx-vp9' else 'aac'
@@ -1469,6 +1500,13 @@ if __name__ == '__main__':
         parser.add_argument('--sub_lang', type=str, help="Subtitle language to burn-in, must be an exact match with what is listed in the file (use --list_subs if you don't know the language)")
         parser.add_argument('--sub_file', type=str, help='Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs)')
         parser.add_argument('--trim_silence', type=SilenceTrimMode, choices=list(SilenceTrimMode), help="Skip silence using a first pass with silencedetect filter. Skip silence at the start, end, or cut all detected silence.")
+        # ---- Start Advanced Feature ----
+        from advanced.vocal_silence_trim import TrimMode
+        parser.add_argument('--vocal_trim', action='store_true', help='Trim on silence using UVR')
+        parser.add_argument('--trim_mode', type=TrimMode, default='continuous_instrumental', choices=list(TrimMode), help='Trim mode. Default = all')
+        parser.add_argument('--instrumental_gain', type=int, default=0, help='Amount of gain to apply to the instrumental track')
+        parser.add_argument('--substitute_instrumental', type=str, help='Path to the instrumental track to substitute')
+        # ---- End Advanced Feature ----
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()

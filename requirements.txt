@@ -1,0 +1,21 @@
+# ultimatevocalremover
+huggingface_hub
+audioread
+librosa
+natsort
+psutil
+pyglet
+pyperclip
+julius
+omegaconf
+diffq
+six
+onnx
+onnx2pytorch
+onnxruntime
+pydub
+pytorch_lightning
+ml_collections
+
+# audio_analyze
+pystoi
