@@ -15,7 +15,6 @@ import os
 import platform
 import signal
 import subprocess
-import sys
 import time
 import traceback
 
@@ -43,6 +42,8 @@ fps_map = { # Map of clip duration to fps. Clip must be below the duration to fi
     400.0: 24.0
 }
 audio_map = { # Map of clip duration to audio bitrate. Very long clips benefit from audio bitrate reduction, but not ideal for music oriented webms. Use --music_mode to bypass.
+    10.0: 128,
+    40.0: 112,
     60.0: 96,
     120.0: 80,
     240.0: 64,
@@ -63,12 +64,13 @@ audio_map_music_mode = { # Use high bit rate in music mode. Trying to keep the m
     400.0: 96
 }
 bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This value is subtracted to prevent file size overshoot, which tends to happen in longer files
-    300.0: 0,
-    360.0: 2,
+    240.0: 0,
+    300.0: 2,
+    360.0: 3,
     400.0: 4
 }
 mixdown_stereo_threshold = 96 # Automatically mixdown to stereo if audio bitrate <= this value
-mixdown_mono_threshold = 56 # Automatically mixdown to mono if audio bitrate <= this value
+mixdown_mono_threshold = 64 # Automatically mixdown to mono if audio bitrate <= this value
 null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1 and certain preprocessing steps, need to output to appropriate null depending on system
 
 files_to_clean = [] # List of temp files to be cleaned up at the end
