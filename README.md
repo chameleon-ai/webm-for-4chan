@@ -5,6 +5,7 @@ COMPATIBILITY IS NOT GUARANTEED FOR YOUR SYSTEM!
 ## Advanced Features
 - Smart mono mixdown and audio bitrate calculation
 - "vocal trim" mode, which will trim the silence in between sentences while ignoring noise from bgm
+- "bgm swap" mode, which will replace any background music and keep the vocals
 
 Each advanced feature module can also be run stand-alone on the command-line.
 
