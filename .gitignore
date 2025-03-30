@@ -5,6 +5,7 @@
 *.log
 *.wav
 *.mkv
+*.mp3
 venv/
 advanced/__pycache__/
 models/

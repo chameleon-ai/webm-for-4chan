@@ -1506,6 +1506,8 @@ if __name__ == '__main__':
         parser.add_argument('--trim_mode', type=TrimMode, default='continuous_instrumental', choices=list(TrimMode), help='Trim mode. Default = all')
         parser.add_argument('--instrumental_gain', type=int, default=0, help='Amount of gain to apply to the instrumental track')
         parser.add_argument('--substitute_instrumental', type=str, help='Path to the instrumental track to substitute')
+        parser.add_argument('--bgm_swap', type=str, help='Swap bgm to the specified file without re-encoding the video')
+        parser.add_argument('--bgm_gain', type=int, default=0, help='Amount of gain to apply to the bgm when using --bgm_swap')
         # ---- End Advanced Feature ----
         args, unknown_args = parser.parse_known_args()
         if help in args:
@@ -1622,6 +1624,21 @@ if __name__ == '__main__':
                 if start_time.total_seconds() == 0:
                     full_video = True
             print('duration:', duration)
+            # ---- Begin Advanced Feature ----
+            if args.bgm_swap is not None:
+                print('Using bgm swap mode.')
+                if not full_video:
+                    print('bgm swap mode only works for the full video, but start time is not 0 or duration does not match full video length. Aborting operation.')
+                    exit(0)
+                from advanced.bgm_swap import bgm_swap
+                audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.board)
+                print('Audio bitrate: {}k'.format(audio_kbps))
+                result, temp_files = bgm_swap(input_filename, args.bgm_swap, bgm_gain = args.bgm_gain, audio_bitrate = audio_kbps)
+                files_to_clean.extend(temp_files)
+                print('output file: "{}"'.format(result))
+                cleanup()
+                exit(0)
+            # ---- End Advanced Feature ----
             result = process_video(input_filename, start_time, duration, args, full_video)
             print('output file: "{}"'.format(result))
             cleanup()   

@@ -38,4 +38,8 @@ In an effort to safe space, audio analysis will be run that compares the two cha
   - `--trim_mode substitute_instrumental` will swap the instrumental track with something else entirely. If you use this option, you also have to specify `--substitute_instrumental file.mp3` where `file.mp3` is the name of the new instrumental track you want to use.
 - `--instrumental_gain` will adjust the volume of the instrumental track in dB, i.e. `--instrumental_gain -6` will lower the instrumental volume by 6dB.
 
+### BGM Swap
+- `--bgm_swap` functions similar to `--audio_replace` but uses UVR to replace only the instrumental track while preserving the vocals. Specify the path to the bgm you want to put in, i.e. `--bgm_swap file.mp3`
+  - Note that the input video stream is copied, not re-encoded. Only the audio is processed.
+  - The standard method of calculating the output audio bitrate applies here. You can override it with `--music_mode` or `--audio_rate`.
 
