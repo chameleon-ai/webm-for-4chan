@@ -23,3 +23,4 @@ pystoi
 # transcribe
 whisper-timestamped
 googletrans
+auditok
