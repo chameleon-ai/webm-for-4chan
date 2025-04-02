@@ -1044,7 +1044,7 @@ def process_video(input_filename, start, duration, args, full_video):
     if args.sub_file is not None:
         if not os.path.exists(args.sub_file):
             print("Warning: Subtitle file '{}' not found, skipping subtitle burn-in.".format(args.sub_file))
-        subs = "'{}'".format(args.sub_file)
+        subs = "'{}'".format(args.sub_file.replace("'", "'\\\\\\''"))
     elif args.auto_subs or args.sub_index is not None or args.sub_lang is not None:
         sub_idx = None
         # Use the first sub index, if any exist
