@@ -6,6 +6,21 @@ import os
 import subprocess
 import time
 
+# Format a timedelta into hh:mm:ss.ms
+def format_timedelta(ts : datetime.timedelta):
+    hours, rm_hr = divmod(ts.total_seconds(), 3600)
+    mins, rm_min = divmod(rm_hr, 60)
+    sec, rm_sec = divmod(rm_min, 1)
+    # Omit leading zero hours and minutes
+    if int(hours) == 0:
+        if int(mins) == 0:
+            ts_str = '{:02}.{:03}'.format(int(sec), int(rm_sec*1000))
+        else:
+            ts_str = '{:02}:{:02}.{:03}'.format(int(mins), int(sec), int(rm_sec*1000))
+    else:
+        ts_str = '{:02}:{:02}:{:02}.{:03}'.format(int(hours), int(mins), int(sec), int(rm_sec*1000))
+    return ts_str
+
 def get_output_filename(input_filename : str, ext_override : str = None):
     """
     Find a filename named after the input, in the same directory as the input, prepended with \_1\_ or \_2\_ etc.

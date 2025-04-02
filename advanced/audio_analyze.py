@@ -115,7 +115,7 @@ def calculate_cosine_similarity(input_filename : str, full_audio = True, start :
         print('5.1 Channel audio detected. Unable to analyze channel similarity.')
     return cosimilarity, temp_files
 
-def calculate_bitrate_from_stoi(input_filename : str, stoi_threshold = 0.99, full_audio = True, start : datetime.timedelta = None, duration : datetime.timedelta = None):
+def calculate_bitrate_from_stoi(input_filename : str, stoi_threshold = 0.9943, full_audio = True, start : datetime.timedelta = None, duration : datetime.timedelta = None):
     """
     Calculates the Short Term Objective Intelligibility of various bitrates.
     Returns the lowest available bitrate with stoi over the stoi_threshold.

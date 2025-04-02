@@ -19,3 +19,7 @@ ml_collections
 
 # audio_analyze
 pystoi
+
+# transcribe
+whisper-timestamped
+googletrans

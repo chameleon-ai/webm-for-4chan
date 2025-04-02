@@ -1002,9 +1002,6 @@ def process_video(input_filename, start, duration, args, full_video):
         duration = get_video_duration(input_filename, start.total_seconds())
         print("Using cut file '{}', duration: {}".format(new_filename,duration))
         full_video = True
-    
-    # Duration check to make sure it will fit for the target board
-    duration_check(duration, args.board, args.no_duration_check)
 
     if args.blackframe:
         frame_skip = blackframe(input_filename, start, duration)
@@ -1013,6 +1010,44 @@ def process_video(input_filename, start, duration, args, full_video):
             duration -= frame_skip
             full_video = False # If skipping frames, it can no longer be possible that full video is rendered
         print('Advancing start time by {}'.format(frame_skip))
+    
+    # ---- Advanced Feature ----
+    if args.translate or args.transcribe or args.find:
+        import advanced.transcribe as transcribe
+        transcribe_audio = input_filename
+        if not full_video:
+            transcribe_audio = transcribe.clip_audio(input_filename, start, duration)
+            files_to_clean.append(transcribe_audio)
+        if args.uvr: # Cleanup vocals if specified
+            from advanced.uvr_cli import uvr_separate
+            vocal_track, instrumental_track = uvr_separate(transcribe_audio)
+            files_to_clean.extend([vocal_track, instrumental_track])
+            transcribe_audio = vocal_track
+        transcript = transcribe.transcribe(transcribe_audio, language=args.language)
+        transcript_filename = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.srt, start=start, duration=duration)
+        print('Transcript was saved to "{}"'.format(transcript_filename))
+        if args.find:
+            ts = transcribe.search_transcript(transcript, args.find)
+            print('{} matches found.'.format(len(ts)))
+            found_clips = transcribe.render_segments(input_filename, ts, start, duration, full_video)
+            files_to_clean.append(found_clips)
+            # Reset stuff to work with newly rendered temp video
+            input_filename = found_clips
+            full_video = True
+            start = datetime.timedelta(seconds=0.0)
+            duration = get_video_duration(found_clips, start.total_seconds())
+        elif not args.no_burn_in: # Specify transcribed sub file unless disabled
+            args.sub_file = transcript_filename
+        if args.translate:
+            translated = transcribe.translate(transcript, language=args.language)
+            translated_subtitles = transcribe.save_transcript(translated, input_filename, transcript_type = transcribe.TranscriptType.srt, start=start_time, duration=duration)
+            print('Translation was saved to "{}"'.format(translated_subtitles))
+            if not args.no_burn_in: # Specify translated sub file unless disabled
+                args.sub_file = translated_subtitles
+    # ---- End Advanced Feature ----
+
+    # Duration check to make sure it will fit for the target board
+    duration_check(duration, args.board, args.no_duration_check)
 
     audio_track = None
     if args.audio_index is not None:
@@ -1510,6 +1545,12 @@ if __name__ == '__main__':
         parser.add_argument('--substitute_instrumental', type=str, help='Path to the instrumental track to substitute')
         parser.add_argument('--bgm_swap', type=str, help='Swap bgm to the specified file without re-encoding the video')
         parser.add_argument('--bgm_gain', type=int, default=0, help='Amount of gain to apply to the bgm when using --bgm_swap')
+        parser.add_argument('--transcribe', action='store_true', help='Transcribe to srt')
+        parser.add_argument('--translate', action='store_true', help='Transcribe and translate. An srt of both languages will be produced.')
+        parser.add_argument('--language', type=str, default='auto', choices=['auto', 'en', 'ja'], help='Transcription language. Usually faster if you specify.')
+        parser.add_argument('--no_burn_in', action='store_true', help='Disables subtitle burn-in when using --transcribe or --translate.')
+        parser.add_argument('--uvr', action='store_true', help='Isolate vocals with UVR before transcription.')
+        parser.add_argument('--find', type=str, help='String to search for in the transcript. A webm will be encoded with only matching strings.')
         # ---- End Advanced Feature ----
         args, unknown_args = parser.parse_known_args()
         if help in args:
