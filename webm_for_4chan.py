@@ -1023,9 +1023,17 @@ def process_video(input_filename, start, duration, args, full_video):
             vocal_track, instrumental_track = uvr_separate(transcribe_audio)
             files_to_clean.extend([vocal_track, instrumental_track])
             transcribe_audio = vocal_track
-        transcript = transcribe.transcribe(transcribe_audio, language=args.language)
+        if args.load_transcript:
+            print('Loading transcript from file.')
+            with open(args.load_transcript) as fin:
+                transcript = json.load(fin)
+        else:
+            transcript = transcribe.transcribe(transcribe_audio, language=args.language)
         transcript_filename = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.srt, start=start, duration=duration)
-        print('Transcript was saved to "{}"'.format(transcript_filename))
+        print('Subtitles were saved to "{}"'.format(transcript_filename))
+        if args.save_transcript:
+            json_transcript = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.json, start=start, duration=duration)
+            print('Transcript was saved to "{}"'.format(json_transcript))
         if args.find:
             ts = transcribe.search_transcript(transcript, args.find)
             print('{} matches found.'.format(len(ts)))
@@ -1041,7 +1049,7 @@ def process_video(input_filename, start, duration, args, full_video):
         if args.translate:
             translated = transcribe.translate(transcript, language=args.language)
             translated_subtitles = transcribe.save_transcript(translated, input_filename, transcript_type = transcribe.TranscriptType.srt, start=start_time, duration=duration)
-            print('Translation was saved to "{}"'.format(translated_subtitles))
+            print('Subtitles were saved to "{}"'.format(translated_subtitles))
             if not args.no_burn_in: # Specify translated sub file unless disabled
                 args.sub_file = translated_subtitles
     # ---- End Advanced Feature ----
@@ -1547,6 +1555,8 @@ if __name__ == '__main__':
         parser.add_argument('--bgm_gain', type=int, default=0, help='Amount of gain to apply to the bgm when using --bgm_swap')
         parser.add_argument('--transcribe', action='store_true', help='Transcribe to srt')
         parser.add_argument('--translate', action='store_true', help='Transcribe and translate. An srt of both languages will be produced.')
+        parser.add_argument('--save_transcript', action='store_true', help='Save transcript json file that can be loaded later.')
+        parser.add_argument('--load_transcript', type=str, help='Joad transcript json file and skip whisper transccription.')
         parser.add_argument('--language', type=str, default='auto', choices=['auto', 'en', 'ja'], help='Transcription language. Usually faster if you specify.')
         parser.add_argument('--no_burn_in', action='store_true', help='Disables subtitle burn-in when using --transcribe or --translate.')
         parser.add_argument('--uvr', action='store_true', help='Isolate vocals with UVR before transcription.')

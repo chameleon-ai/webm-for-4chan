@@ -40,7 +40,12 @@ In an effort to reduce file size, audio analysis will be run that compares the t
 - `--find` will search the transcript for all instances of a matching string, i.e. `--find the` will return all instances of 'the' and splice a video with all instances of the word together.
 - `--translate` will run the transcript through Google translate. There is no need to specify `--transcript` in this case.
   - It will burn-in the translated subtitles by default. Disable this with `--no_burn_in`
-- Note that `--dry_run` will still do all the above steps. A dry run only skips the last step of webm encoding.
+- `--save_transcript` will save the transcript to a json file that can be loaded with `--load_transcript`. The file will be named after the input file in the same manner as the subtitles.
+- `--load_transcript` will skip the whisper transcription step and load from file, allowing functions like `--find` and `--translate` to be used.
+  - An example of saving and then using the transcript:
+  - `python webm_for_4chan.py input.mp4 --transcribe --save_transcript --dry_run`
+  - `python webm_for_4chan.py input.mp4 --find "hello" --load_transcript input.en.json`
+- Note that `--dry_run` only skips the last step of webm encoding. Useful if you want to transcribe / translate first and encode later.
 
 ### Vocal Trim
 - The `--vocal_trim` flag will run Ultimate Vocal Remover on the audio track and then split the video on silence detected in the vocal track.
