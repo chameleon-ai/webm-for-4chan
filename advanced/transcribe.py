@@ -101,12 +101,12 @@ def render_segments(input_filename: str, timestamps : list, start : datetime.tim
     video_filter_graph, audio_filter_graph = build_filter_graph(adjusted_timestamps)
     return segment_video(input_filename, video_filter_graph, audio_filter_graph, start, duration, full_video)
 
-def transcribe(input_filename : str, model='large-v3-turbo', device='cuda', language='auto', condition_on_previous_text=False, vad=True, naive_approach=True):
+def transcribe(input_filename : str, model='large-v3-turbo', device='cuda', language='auto', initial_prompt=None, condition_on_previous_text=False, vad=True, naive_approach=True):
     print('Loading whisper...')
     loaded_model = whisper.load_model(model, device=device, download_root="./models/")
     audio = whisper.load_audio(input_filename)
     print('Transcribing...')
-    result = whisper.transcribe_timestamped(loaded_model, audio, naive_approach=naive_approach, vad='auditok' if vad else False, beam_size=5, best_of=5, temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0), language=None if language == 'auto' else language, condition_on_previous_text=condition_on_previous_text)
+    result = whisper.transcribe_timestamped(loaded_model, audio, naive_approach=naive_approach, initial_prompt=initial_prompt, vad='auditok' if vad else False, beam_size=5, best_of=5, temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0), language=None if language == 'auto' else language, condition_on_previous_text=condition_on_previous_text)
     return result
 
 async def translate_bulk(segments : list, language : str):

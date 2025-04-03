@@ -36,6 +36,7 @@ In an effort to reduce file size, audio analysis will be run that compares the t
 - `--transcript` will run whisper transcription. An .srt subtitle file will be generated with the transcript and the subtitles will be burned-in.
   - `--no_burn_in` will disable transcript burn-in, only producing the .srt file
   - `--language` explicitly specifies the transcript language, i.e. `--language ja` will make sure that it tries to interpret the source as Japanese. I'm not sure which languages work, I've only tested English and Japanese. The model used is whisper-large-v3-turbo, so refer to the model card for supported languages.
+  - `--prompt` will specify the initial prompt used by whisper. This can be used to condition the model on a style or initialize it with certain proper nouns that it otherwise wouldn't know.
   - `--uvr` will run a first pass of Ultimate Vocal Remover, then put transcribe the vocal segment. Usually you don't have to bother with this.
 - `--find` will search the transcript for all instances of a matching string, i.e. `--find the` will return all instances of 'the' and splice a video with all instances of the word together.
 - `--translate` will run the transcript through Google translate. There is no need to specify `--transcript` in this case.
