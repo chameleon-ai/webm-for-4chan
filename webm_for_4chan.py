@@ -1029,8 +1029,8 @@ def process_video(input_filename, start, duration, args, full_video):
                 transcript = json.load(fin)
         else:
             transcript = transcribe.transcribe(transcribe_audio, language=args.language, initial_prompt=args.prompt)
-        transcript_filename = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.srt, start=start, duration=duration)
-        print('Subtitles were saved to "{}"'.format(transcript_filename))
+            transcript_filename = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.srt, start=start, duration=duration)
+            print('Subtitles were saved to "{}"'.format(transcript_filename))
         if args.save_transcript:
             json_transcript = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.json, start=start, duration=duration)
             print('Transcript was saved to "{}"'.format(json_transcript))

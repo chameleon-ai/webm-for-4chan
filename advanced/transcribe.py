@@ -88,17 +88,33 @@ def segment_video(input_filename : str, video_filter_graph : str, audio_filter_g
     else:
         raise RuntimeError("File '{}' not found".format(output_filename))
 
-def render_segments(input_filename: str, timestamps : list, start : datetime.timedelta, duration : datetime.timedelta, full_video : bool, room_ms = 175):
-    adjusted_timestamps = timestamps
+def render_segments(input_filename: str, timestamps : list, start : datetime.timedelta, duration : datetime.timedelta, full_video : bool, room_ms = 250):
+    adjusted_timestamps = [ [t[0], t[1]] for t in timestamps]
     if room_ms > 0: # Add time to the timestamps
-        room_sec = room_ms / 1000.0
-        adjusted_timestamps = []
-        for seg_start, seg_end in timestamps:
-            adjusted_start = 0.0 if seg_start < room_sec else seg_start - room_sec
-            adjusted_end = seg_end + room_sec
-            adjusted_timestamps.append((adjusted_start, adjusted_end))
+        room_sec = room_ms / 1000.0 
+        end = start.total_seconds() + duration.total_seconds()  # Cap at the duration limit
+        for idx,(start_ts, end_ts) in enumerate(timestamps):
+            prev_end = 0.0 if idx < 1 else timestamps[idx-1][1]
+            # Clamp to prev segment end and next segment start
+            adjusted_timestamps[idx][0] = prev_end if start_ts - room_sec < prev_end else start_ts - room_sec
+            next_start = end if idx + 1 >= len(timestamps) else timestamps[idx+1][0]
+            adjusted_timestamps[idx][1] = next_start if end_ts + room_sec > next_start else end_ts + room_sec
+            #print('{} {}'.format(timestamps[idx], adjusted_timestamps[idx]))
+    
+    # Make a new list with merged timestamps that overlap
+    merged = [(adjusted_timestamps[0][0], adjusted_timestamps[0][1])] # Initialize the merged list with the first timestamp
 
-    video_filter_graph, audio_filter_graph = build_filter_graph(adjusted_timestamps)
+    for current_start, current_end in adjusted_timestamps[1:]:
+        last_start, last_end = merged[-1]
+        if current_start <= last_end: # Check if there is an overlap
+            # Merge the intervals by updating the end time
+            merged[-1] = (last_start, max(last_end, current_end))
+            #print("merging {} {} {}".format(last_start, last_end, current_end))
+        else:
+            # No overlap, just add the current timestamp
+            merged.append((current_start, current_end))
+
+    video_filter_graph, audio_filter_graph = build_filter_graph(merged)
     return segment_video(input_filename, video_filter_graph, audio_filter_graph, start, duration, full_video)
 
 def transcribe(input_filename : str, model='large-v3-turbo', device='cuda', language='auto', initial_prompt=None, condition_on_previous_text=False, vad=True, naive_approach=True):
