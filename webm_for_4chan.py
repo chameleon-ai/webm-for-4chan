@@ -1098,6 +1098,8 @@ def process_video(input_filename, start, duration, args, full_video):
                     if args.audio_rate is None: # Determine audio rate from stoi calculations unless user specified
                         audio_kbps, more_temp_files = calculate_bitrate_from_stoi(input_filename, full_audio=full_video, start=start, duration=duration)
                         files_to_clean.extend(more_temp_files)
+            else: # Use standard method if audio tracks are asymmetrical
+                args.mixdown = get_mixdown_mode(audio_kbps, audio_track, args.mixdown)
         # ---- End Advanced Feature ----
         audio_bitrate = '{}k'.format(audio_kbps)
         print(audio_bitrate)
