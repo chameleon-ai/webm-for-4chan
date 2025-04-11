@@ -88,17 +88,18 @@ def segment_video(input_filename : str, video_filter_graph : str, audio_filter_g
     else:
         raise RuntimeError("File '{}' not found".format(output_filename))
 
-def render_segments(input_filename: str, timestamps : list, start : datetime.timedelta, duration : datetime.timedelta, full_video : bool, room_ms = 250):
+def render_segments(input_filename: str, timestamps : list, start : datetime.timedelta, duration : datetime.timedelta, full_video : bool, adjust_pre_ms = 100, adjust_post_ms = 300):
     adjusted_timestamps = [ [t[0], t[1]] for t in timestamps]
-    if room_ms > 0: # Add time to the timestamps
-        room_sec = room_ms / 1000.0 
+    if adjust_pre_ms > 0 or adjust_post_ms > 0: # Add time to the timestamps
+        pre_sec = adjust_pre_ms / 1000.0 # Amount of time to adjust the start timestamp back
+        post_sec = adjust_post_ms / 1000.0 # Amount of time to adjust the end timestamp forward
         end = start.total_seconds() + duration.total_seconds()  # Cap at the duration limit
         for idx,(start_ts, end_ts) in enumerate(timestamps):
             prev_end = 0.0 if idx < 1 else timestamps[idx-1][1]
             # Clamp to prev segment end and next segment start
-            adjusted_timestamps[idx][0] = prev_end if start_ts - room_sec < prev_end else start_ts - room_sec
+            adjusted_timestamps[idx][0] = prev_end if start_ts - pre_sec < prev_end else start_ts - pre_sec
             next_start = end if idx + 1 >= len(timestamps) else timestamps[idx+1][0]
-            adjusted_timestamps[idx][1] = next_start if end_ts + room_sec > next_start else end_ts + room_sec
+            adjusted_timestamps[idx][1] = next_start if end_ts + post_sec > next_start else end_ts + post_sec
             #print('{} {}'.format(timestamps[idx], adjusted_timestamps[idx]))
     
     # Make a new list with merged timestamps that overlap
@@ -244,6 +245,7 @@ if __name__ == '__main__':
         parser.add_argument('--condition_on_previous', action='store_true', help='Whether to provide the previous output as a prompt for the next window.')
         parser.add_argument('--load_transcript', type=str, help='Skip whisper and operate on a pre-saved transcript file.')
         parser.add_argument('--save_transcript', type=TranscriptType, default='srt', choices=list(TranscriptType), help='Save the transcript to the specified file type.')
+        parser.add_argument('--prompt', type=str, help='Initial prompt to use for transcription.')
         parser.add_argument('--model', type=str, default='large-v3-turbo', help='Whisper model to use.')
         parser.add_argument('--device', type=str, default='cuda', choices=['cuda','cpu'], help='Cuda device to use.')
         parser.add_argument('--language', type=str, default='auto', choices=['auto', 'en', 'ja', 'fr'], help='Transcription language. Usually faster if you specify. Capability depends on the model.')
@@ -289,7 +291,7 @@ if __name__ == '__main__':
             with open(args.load_transcript) as fin:
                 transcript = json.load(fin)
         else:
-            transcript = transcribe(input_filename, model=args.model, device=args.device, language=args.language, condition_on_previous_text=args.condition_on_previous)
+            transcript = transcribe(input_filename, model=args.model, device=args.device, language=args.language, initial_prompt=args.prompt, condition_on_previous_text=args.condition_on_previous)
             if args.save_transcript:
                 transcript_filename = save_transcript(transcript, args.input, args.save_transcript, start_time, duration)
                 print('Transcript was saved to "{}"'.format(transcript_filename))

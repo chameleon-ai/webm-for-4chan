@@ -1014,6 +1014,7 @@ def process_video(input_filename, start, duration, args, full_video):
     # ---- Advanced Feature ----
     if args.translate or args.transcribe or args.find:
         import advanced.transcribe as transcribe
+        subtitle_type = transcribe.TranscriptType.srt if args.subtitle_type == 'srt' else transcribe.TranscriptType.vtt
         transcribe_audio = input_filename
         if not full_video:
             transcribe_audio = transcribe.clip_audio(input_filename, start, duration)
@@ -1028,8 +1029,10 @@ def process_video(input_filename, start, duration, args, full_video):
             with open(args.load_transcript) as fin:
                 transcript = json.load(fin)
         else:
-            transcript = transcribe.transcribe(transcribe_audio, language=args.language, initial_prompt=args.prompt)
-            transcript_filename = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.srt, start=start, duration=duration)
+            if args.prompt:
+                print('Initial prompt: "{}"'.format(args.prompt))
+            transcript = transcribe.transcribe(transcribe_audio, language=args.language, initial_prompt=args.prompt, condition_on_previous_text=args.condition_on_previous)
+            transcript_filename = transcribe.save_transcript(transcript, input_filename, transcript_type = subtitle_type, start=start, duration=duration)
             print('Subtitles were saved to "{}"'.format(transcript_filename))
         if args.save_transcript:
             json_transcript = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.json, start=start, duration=duration)
@@ -1048,8 +1051,11 @@ def process_video(input_filename, start, duration, args, full_video):
             args.sub_file = transcript_filename
         if args.translate:
             translated = transcribe.translate(transcript, language=args.language)
-            translated_subtitles = transcribe.save_transcript(translated, input_filename, transcript_type = transcribe.TranscriptType.srt, start=start_time, duration=duration)
+            translated_subtitles = transcribe.save_transcript(translated, input_filename, transcript_type = subtitle_type, start=start_time, duration=duration)
             print('Subtitles were saved to "{}"'.format(translated_subtitles))
+            if args.save_transcript:
+                translated_transcript = transcribe.save_transcript(translated, input_filename, transcript_type = transcribe.TranscriptType.json, start=start, duration=duration)
+                print('Translated transcript was saved to "{}"'.format(translated_transcript))
             if not args.no_burn_in: # Specify translated sub file unless disabled
                 args.sub_file = translated_subtitles
     # ---- End Advanced Feature ----
@@ -1555,7 +1561,9 @@ if __name__ == '__main__':
         parser.add_argument('--substitute_instrumental', type=str, help='Path to the instrumental track to substitute')
         parser.add_argument('--bgm_swap', type=str, help='Swap bgm to the specified file without re-encoding the video')
         parser.add_argument('--bgm_gain', type=int, default=0, help='Amount of gain to apply to the bgm when using --bgm_swap')
-        parser.add_argument('--transcribe', action='store_true', help='Transcribe to srt')
+        parser.add_argument('--transcribe', action='store_true', help='Transcribe to subtitle file')
+        parser.add_argument('--subtitle_type', type=str, default='srt', choices=['srt','vtt'], help='The transcription subtitle format.')
+        parser.add_argument('--condition_on_previous', action='store_true', help='Whether to provide the previous output as a prompt for the next window.')
         parser.add_argument('--translate', action='store_true', help='Transcribe and translate. An srt of both languages will be produced.')
         parser.add_argument('--save_transcript', action='store_true', help='Save transcript json file that can be loaded later.')
         parser.add_argument('--load_transcript', type=str, help='Joad transcript json file and skip whisper transccription.')
