@@ -4,6 +4,8 @@ Targets 6MB with sound (/wsg/) by default, but 4MB with sound (/gif/) and 4MB wi
 Makes .webm (vp9/opus) by default, but .mp4 (h264/aac) is also supported.\
 Developed on Linux, probably works on Windows.
 
+Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want to learn more about webms in general.
+
 ## Features
 - Precise size calculation, designed to render webms just under the size limit
 - Automatic resolution scaling
