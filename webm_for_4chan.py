@@ -42,9 +42,9 @@ fps_map = { # Map of clip duration to fps. Clip must be below the duration to fi
     400.0: 24.0
 }
 audio_map = { # Map of clip duration to audio bitrate. Very long clips benefit from audio bitrate reduction, but not ideal for music oriented webms. Use --music_mode to bypass.
-    10.0: 128,
-    40.0: 112,
-    60.0: 96,
+    15.0: 128,
+    45.0: 112,
+    95.0: 96,
     120.0: 80,
     240.0: 64,
     300.0: 56,
@@ -59,6 +59,10 @@ audio_map_gif = { # Separate audio lookup for gif mode (4MB w/ sound)
     120.0: 32
 }
 audio_map_music_mode = { # Use high bit rate in music mode. Trying to keep the max size under 5.5MB.
+    15.0: 320,
+    45.0: 256,
+    100.0: 192,
+    220.0: 160,
     285.0: 128,
     330.0: 112,
     400.0: 96
