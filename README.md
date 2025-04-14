@@ -157,7 +157,7 @@ Type `--help` for a complete list of commands.
 - The script is designed to get as close to the size limit as possible, but sometimes overshoots. If this happens, a warning is printed. Video bit-rate can be adjusted with `-b`/`--bitrate_compensation`. Usually a compensation of just 2 or 3 is sufficient. If the file is undershooting by a large amount, you can also use a negative number to make the file bigger.
 - Audio bit-rate is automatically reduced for long clips. Force high audio bit-rate with `--music_mode`, or specify the exact rate manually with `--audio_rate`
 - If your source is surround sound, it's highly recommended to use `--music_mode` or `--stereo` especially for clips over 2:00. The default audio bit-rate is meant for stereo and can cause surround sources to sound too crunchy.
-- Image + audio combine mode behaves as if in `--music_mode`. You can still manually specify `--audio_rate`
+- Image + audio combine mode automatically maximizes the audio bitrate based on song length. You can still manually specify `--audio_rate`
 - Fps cap is automatically reduced for long clips. You can manually specify with `--fps`
 - If you don't like the automatically calculated resolution, use the `--resolution` override.
 - By default, resolution remains unchanged in image + audio combine mode. You can still manually specify with `--resolution`

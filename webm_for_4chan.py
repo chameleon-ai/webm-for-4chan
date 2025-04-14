@@ -1209,26 +1209,34 @@ def image_audio_combine(input_image, input_audio, args):
 
     size_limit = get_size_limit(args)
     print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
-    audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, True, args.board)
-    audio_bitrate = '{}k'.format(audio_kbps)
-    print(audio_bitrate)
-    args.mixdown = get_mixdown_mode(audio_kbps, None, args.mixdown) # Determine mixdown, if any
-    print('Calculating audio size')
-    audio_size = 0
-    audio_copy = False
-    # Can copy audio if it's already opus
-    if (audio_subtype == 'ogg') and args.normalize is None:
-        audio_copy = True
-        audio_size = os.path.getsize(input_audio)
-    else:
-        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, 'libopus', args.mixdown, args.normalize)
-        if no_audio:
-            raise RuntimeError('Unable to complete image + audio combine mode. No audio stream found.')
-    print('Audio size: {}kB'.format(int(audio_size/1024)))
-    adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
-    size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
-    target_kbps = min((int)(size_kb / duration.total_seconds()), max_bitrate) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
-    compensated_kbps = target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation) # Subtract the compensation factor if specified
+    while True:
+        max_audio_rate = size_limit / duration.total_seconds() / 1024 * 8
+        audio_kbps = args.audio_rate if args.audio_rate is not None else max([x for x in audio_bitrate_table if x <= max_audio_rate])
+        audio_bitrate = '{}k'.format(audio_kbps)
+        print(audio_bitrate)
+        args.mixdown = get_mixdown_mode(audio_kbps, None, args.mixdown) # Determine mixdown, if any
+        print('Calculating audio size')
+        audio_size = 0
+        audio_copy = False
+        # Can copy audio if it's already opus
+        if (audio_subtype == 'ogg') and args.normalize is None and args.audio_rate is None:
+            audio_copy = True
+            audio_size = os.path.getsize(input_audio)
+        else:
+            audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, 'libopus', args.mixdown, args.normalize)
+            if no_audio:
+                raise RuntimeError('Unable to complete image + audio combine mode. No audio stream found.')
+        print('Audio size: {}kB'.format(int(audio_size/1024)))
+        adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
+        size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
+        target_kbps = min((int)(size_kb / duration.total_seconds()), max_bitrate) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
+        compensated_kbps = target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation) # Subtract the compensation factor if specified
+        if compensated_kbps <= 5: # Not enough margin for video, re-calculate by reducing audio bit-rate
+            print('Warning: Audio bitrate is too large. Reducing bitrate:', end='')
+            args.audio_rate = max([x for x in audio_bitrate_table if x < audio_kbps])
+        else:
+            break
+    compensated_kbps -= 5 # Hard-code a reduction in target bit-rate so that we stay under the limit
     video_bitrate = '{}k'.format(compensated_kbps)
     
     ffmpeg_args = ["ffmpeg", '-hide_banner']
