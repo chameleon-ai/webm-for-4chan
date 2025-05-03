@@ -922,6 +922,25 @@ def get_mixdown_mode(audio_kbps, audio_track, mixdown : MixdownMode):
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
 
+    # ---- Advanced Feature ----
+    if args.vocal_trim:
+        from advanced.vocal_silence_trim import vocal_silence_trim
+        processed, temp_files = vocal_silence_trim(input_filename, start, duration, full_video, trim_mode= args.trim_mode, substitute_instrumental=args.substitute_instrumental, instrumental_gain = args.instrumental_gain)
+        files_to_clean.extend(temp_files)
+        files_to_clean.append(processed)
+        # Reset start and duration to process full newly generated temp video
+        # Cancel out incompatible flags
+        args.trim_silence = None
+        args.cut = None
+        args.concat = None
+        args.first_second_every_minute = False
+        input_filename = processed
+        start = datetime.timedelta(seconds=0.0)
+        duration = get_video_duration(input_filename, start.total_seconds())
+        print("Using cut file '{}', duration: {}".format(processed,duration))
+        full_video = True
+    # ---- End Advanced Feature ----
+
     if args.trim_silence is not None:
         silence_segments = silencedetect(input_filename, start, duration)
         if len(silence_segments) == 0:
@@ -992,9 +1011,6 @@ def process_video(input_filename, start, duration, args, full_video):
         duration = get_video_duration(input_filename, start.total_seconds())
         print("Using cut file '{}', duration: {}".format(new_filename,duration))
         full_video = True
-    
-    # Duration check to make sure it will fit for the target board
-    duration_check(duration, args.board, args.no_duration_check)
 
     if args.blackframe:
         frame_skip = blackframe(input_filename, start, duration)
@@ -1003,6 +1019,58 @@ def process_video(input_filename, start, duration, args, full_video):
             duration -= frame_skip
             full_video = False # If skipping frames, it can no longer be possible that full video is rendered
         print('Advancing start time by {}'.format(frame_skip))
+    
+    # ---- Advanced Feature ----
+    if args.translate or args.transcribe or args.find:
+        import advanced.transcribe as transcribe
+        subtitle_type = transcribe.TranscriptType.srt if args.subtitle_type == 'srt' else transcribe.TranscriptType.vtt
+        transcribe_audio = input_filename
+        if not full_video:
+            transcribe_audio = transcribe.clip_audio(input_filename, start, duration)
+            files_to_clean.append(transcribe_audio)
+        if args.uvr: # Cleanup vocals if specified
+            from advanced.uvr_cli import uvr_separate
+            vocal_track, instrumental_track = uvr_separate(transcribe_audio)
+            files_to_clean.extend([vocal_track, instrumental_track])
+            transcribe_audio = vocal_track
+        if args.load_transcript:
+            print('Loading transcript from file.')
+            with open(args.load_transcript) as fin:
+                transcript = json.load(fin)
+        else:
+            if args.prompt:
+                print('Initial prompt: "{}"'.format(args.prompt))
+            transcript = transcribe.transcribe(transcribe_audio, language=args.language, initial_prompt=args.prompt, condition_on_previous_text=args.condition_on_previous)
+            transcript_filename = transcribe.save_transcript(transcript, input_filename, transcript_type = subtitle_type, start=start, duration=duration)
+            print('Subtitles were saved to "{}"'.format(transcript_filename))
+        if args.save_transcript:
+            json_transcript = transcribe.save_transcript(transcript, input_filename, transcript_type = transcribe.TranscriptType.json, start=start, duration=duration)
+            print('Transcript was saved to "{}"'.format(json_transcript))
+        if args.find:
+            ts = transcribe.search_transcript(transcript, args.find)
+            print('{} matches found.'.format(len(ts)))
+            found_clips = transcribe.render_segments(input_filename, ts, start, duration, full_video)
+            files_to_clean.append(found_clips)
+            # Reset stuff to work with newly rendered temp video
+            input_filename = found_clips
+            full_video = True
+            start = datetime.timedelta(seconds=0.0)
+            duration = get_video_duration(found_clips, start.total_seconds())
+        elif not args.no_burn_in: # Specify transcribed sub file unless disabled
+            args.sub_file = transcript_filename
+        if args.translate:
+            translated = transcribe.translate(transcript, language=args.language)
+            translated_subtitles = transcribe.save_transcript(translated, input_filename, transcript_type = subtitle_type, start=start_time, duration=duration)
+            print('Subtitles were saved to "{}"'.format(translated_subtitles))
+            if args.save_transcript:
+                translated_transcript = transcribe.save_transcript(translated, input_filename, transcript_type = transcribe.TranscriptType.json, start=start, duration=duration)
+                print('Translated transcript was saved to "{}"'.format(translated_transcript))
+            if not args.no_burn_in: # Specify translated sub file unless disabled
+                args.sub_file = translated_subtitles
+    # ---- End Advanced Feature ----
+
+    # Duration check to make sure it will fit for the target board
+    duration_check(duration, args.board, args.no_duration_check)
 
     audio_track = None
     if args.audio_index is not None:
@@ -1033,9 +1101,23 @@ def process_video(input_filename, start, duration, args, full_video):
     else:
         print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
         audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.board)
+        # ---- Start Advanced Feature ----
+        if args.mixdown is not None and args.mixdown == MixdownMode.auto:
+            from advanced.audio_analyze import calculate_cosine_similarity, calculate_bitrate_from_stoi
+            print('')
+            similarity, temp_files = calculate_cosine_similarity(input_filename, full_audio=full_video, start=start, duration=duration)
+            files_to_clean.extend(temp_files)
+            if similarity is not None and similarity > 0.9:
+                    print('High track similarity. Using mono mixdown.')
+                    args.mixdown = MixdownMode.mono
+                    if args.audio_rate is None: # Determine audio rate from stoi calculations unless user specified
+                        audio_kbps, more_temp_files = calculate_bitrate_from_stoi(input_filename, full_audio=full_video, start=start, duration=duration)
+                        files_to_clean.extend(more_temp_files)
+            else: # Use standard method if audio tracks are asymmetrical
+                args.mixdown = get_mixdown_mode(audio_kbps, audio_track, args.mixdown)
+        # ---- End Advanced Feature ----
         audio_bitrate = '{}k'.format(audio_kbps)
         print(audio_bitrate)
-        args.mixdown = get_mixdown_mode(audio_kbps, audio_track, args.mixdown) # Determine mixdown, if any
         print('Calculating audio size')
         # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
         acodec = 'libopus' if args.codec == 'libvpx-vp9' else 'aac'
@@ -1488,6 +1570,26 @@ if __name__ == '__main__':
         parser.add_argument('--sub_lang', type=str, help="Subtitle language to burn-in, must be an exact match with what is listed in the file (use --list_subs if you don't know the language)")
         parser.add_argument('--sub_file', type=str, help='Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs)')
         parser.add_argument('--trim_silence', type=SilenceTrimMode, choices=list(SilenceTrimMode), help="Skip silence using a first pass with silencedetect filter. Skip silence at the start, end, or cut all detected silence.")
+        # ---- Start Advanced Feature ----
+        from advanced.vocal_silence_trim import TrimMode
+        parser.add_argument('--vocal_trim', action='store_true', help='Trim on silence using UVR')
+        parser.add_argument('--trim_mode', type=TrimMode, default='continuous_instrumental', choices=list(TrimMode), help='Trim mode. Default = all')
+        parser.add_argument('--instrumental_gain', type=int, default=0, help='Amount of gain to apply to the instrumental track')
+        parser.add_argument('--substitute_instrumental', type=str, help='Path to the instrumental track to substitute')
+        parser.add_argument('--bgm_swap', type=str, help='Swap bgm to the specified file without re-encoding the video')
+        parser.add_argument('--bgm_gain', type=int, default=0, help='Amount of gain to apply to the bgm when using --bgm_swap')
+        parser.add_argument('--transcribe', action='store_true', help='Transcribe to subtitle file')
+        parser.add_argument('--subtitle_type', type=str, default='srt', choices=['srt','vtt'], help='The transcription subtitle format.')
+        parser.add_argument('--condition_on_previous', action='store_true', help='Whether to provide the previous output as a prompt for the next window.')
+        parser.add_argument('--translate', action='store_true', help='Transcribe and translate. An srt of both languages will be produced.')
+        parser.add_argument('--save_transcript', action='store_true', help='Save transcript json file that can be loaded later.')
+        parser.add_argument('--load_transcript', type=str, help='Joad transcript json file and skip whisper transccription.')
+        parser.add_argument('--language', type=str, default='auto', choices=['auto', 'en', 'ja'], help='Transcription language. Usually faster if you specify.')
+        parser.add_argument('--prompt', type=str, help='Initial prompt to use for transcription.')
+        parser.add_argument('--no_burn_in', action='store_true', help='Disables subtitle burn-in when using --transcribe or --translate.')
+        parser.add_argument('--uvr', action='store_true', help='Isolate vocals with UVR before transcription.')
+        parser.add_argument('--find', type=str, help='String to search for in the transcript. A webm will be encoded with only matching strings.')
+        # ---- End Advanced Feature ----
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()
@@ -1603,6 +1705,21 @@ if __name__ == '__main__':
                 if start_time.total_seconds() == 0:
                     full_video = True
             print('duration:', duration)
+            # ---- Begin Advanced Feature ----
+            if args.bgm_swap is not None:
+                print('Using bgm swap mode.')
+                if not full_video:
+                    print('bgm swap mode only works for the full video, but start time is not 0 or duration does not match full video length. Aborting operation.')
+                    exit(0)
+                from advanced.bgm_swap import bgm_swap
+                audio_kbps = args.audio_rate if args.audio_rate is not None else calculate_target_audio_rate(duration, args.music_mode, args.board)
+                print('Audio bitrate: {}k'.format(audio_kbps))
+                result, temp_files = bgm_swap(input_filename, args.bgm_swap, bgm_gain = args.bgm_gain, audio_bitrate = audio_kbps)
+                files_to_clean.extend(temp_files)
+                print('output file: "{}"'.format(result))
+                cleanup()
+                exit(0)
+            # ---- End Advanced Feature ----
             result = process_video(input_filename, start_time, duration, args, full_video)
             print('output file: "{}"'.format(result))
             cleanup()   
