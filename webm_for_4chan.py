@@ -133,26 +133,27 @@ def is_segment(arg : str):
     return True # Only true if all arguments pass as individual timestamps
 
 # Rudamentary timestamp parsing, the format is H:M:S.ms and hours/minutes/milliseconds can be omitted
-def parsetime(ts_input):
-    ts = ts_input.split('.')
-    # Note: I didn't want to import a 3rd party library just to parse simple timestamps. The janky millisecond parsing is a result of this.
-    ms = 0
-    if len(ts) > 1:
-        ms = int(ts[1])
-        if len(ts[1]) == 1: # Single digit, that means its 100s of ms
-            ms *= 100
-        elif len(ts[1]) == 2: # 2 digits, that means its 10s of ms
-            ms *= 10
-    try:
-        duration = time.strptime(ts[0], '%H:%M:%S')
-        return datetime.timedelta(hours=duration.tm_hour, minutes=duration.tm_min, seconds=duration.tm_sec, milliseconds=ms)
-    except ValueError:
-        try:
-            duration = time.strptime(ts[0], '%M:%S')
-            return datetime.timedelta(minutes=duration.tm_min, seconds=duration.tm_sec, milliseconds=ms)
-        except ValueError:
-            duration = time.strptime(ts[0], '%S')
-            return datetime.timedelta(seconds=duration.tm_sec, milliseconds=ms)
+def parsetime(timestamp: str) -> datetime.timedelta:
+    # Split the timestamp by the colon to separate hours, minutes, and seconds
+    parts = timestamp.split(':')
+    
+    # Initialize total seconds
+    total_seconds = 0.0
+    
+    if len(parts) == 3:  # Format: hours:minutes:seconds
+        hours, minutes, seconds = parts
+        total_seconds += int(hours) * 3600  # Convert hours to seconds
+        total_seconds += int(minutes) * 60   # Convert minutes to seconds
+        total_seconds += float(seconds)       # Add seconds
+    elif len(parts) == 2:  # Format: minutes:seconds
+        minutes, seconds = parts
+        total_seconds += int(minutes) * 60   # Convert minutes to seconds
+        total_seconds += float(seconds)       # Add seconds
+    else:  # Format: seconds (or seconds with milliseconds)
+        total_seconds = float(timestamp)
+    
+    # Return a timedelta object
+    return datetime.timedelta(seconds=total_seconds)
 
 # Define the 3 different options for 4chan
 class BoardMode(Enum):
@@ -539,6 +540,8 @@ def parse_segments(start, segments : str, do_print = True):
         segment_start, segment_end = segment.split('-')
         absolute_start = parsetime(segment_start)
         absolute_end = parsetime(segment_end)
+        print(absolute_start)
+        print(absolute_end)
         if absolute_start < start or absolute_end < start:
             raise RuntimeError('Segment {}-{} starts before the start time of {}'.format(absolute_start, absolute_end, start))
         relative_start = absolute_start - start
