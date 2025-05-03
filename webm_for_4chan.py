@@ -540,8 +540,6 @@ def parse_segments(start, segments : str, do_print = True):
         segment_start, segment_end = segment.split('-')
         absolute_start = parsetime(segment_start)
         absolute_end = parsetime(segment_end)
-        print(absolute_start)
-        print(absolute_end)
         if absolute_start < start or absolute_end < start:
             raise RuntimeError('Segment {}-{} starts before the start time of {}'.format(absolute_start, absolute_end, start))
         relative_start = absolute_start - start
