@@ -18,6 +18,10 @@ import subprocess
 import time
 import traceback
 
+ffmpeg_path = None # Edit this if you want to specify a custom path to ffmpeg
+ffprobe_path = ffmpeg_path # Usually you should not have to edit this
+ffmpeg_exe = os.path.join(ffmpeg_path, 'ffmpeg') if ffmpeg_path else 'ffmpeg'
+ffprobe_exe = os.path.join(ffprobe_path, 'ffprobe') if ffprobe_path else 'ffprobe'
 max_bitrate = 2800 # (kbps) Cap bitrate in case the clip is really short. This is already an absurdly high rate.
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
 max_duration = [400, 300, 120] # Maximum clip durations, in seconds [wsg, gif, all other boards]
@@ -101,7 +105,7 @@ def get_temp_filename(extension : str):
 # This is only called if you don't specify a duration or end time. Uses ffprobe to find out how long the input is.
 def get_video_duration(input_filename, start_time : float):
     # https://superuser.com/questions/650291/how-to-get-video-duration-in-seconds
-    result = subprocess.run(["ffprobe","-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_filename], stdout=subprocess.PIPE, text=True)
+    result = subprocess.run([ffprobe_exe,"-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_filename], stdout=subprocess.PIPE, text=True)
     duration_seconds = float(result.stdout)
     return datetime.timedelta(seconds=duration_seconds - start_time)
 
@@ -231,7 +235,7 @@ def calculate_target_resolution(duration, input_filename, target_bitrate, resizi
     if str(resizing_mode) != 'table':
         try:
             # ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 input.mp4
-            result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
+            result = subprocess.run([ffprobe_exe,"-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
             if result.returncode == 0:
                 # Grab the largest dimension of the video's resolution
                 raw_width, raw_height = [int(x) for x in result.stdout.strip().split(',')]
@@ -305,7 +309,7 @@ def calculate_target_fps(input_filename, duration):
             break
     # Get input frame rate
     try:
-        result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "v", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", input_filename], stdout=subprocess.PIPE, text=True)
+        result = subprocess.run([ffprobe_exe,"-v", "error", "-select_streams", "v", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", input_filename], stdout=subprocess.PIPE, text=True)
         if result.returncode != 0:
             print(result.stdout)
             print('ffprobe returned error code {}'.format(result.returncode))
@@ -355,7 +359,7 @@ def find_json(output):
 
 # Return a tuple containing the stream layout and a flag that is True of no audio stream was detected
 def get_audio_layout(input_filename : str, track : int):
-    ffprobe_cmd = ['ffprobe', '-v', 'error', '-hide_banner', '-of', 'default=noprint_wrappers=1:nokey=1', '-show_streams', '-select_streams', 'a:{}'.format(track), '-print_format', 'json', input_filename]
+    ffprobe_cmd = [ffprobe_exe, '-v', 'error', '-hide_banner', '-of', 'default=noprint_wrappers=1:nokey=1', '-show_streams', '-select_streams', 'a:{}'.format(track), '-print_format', 'json', input_filename]
     result = subprocess.run(ffprobe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
         print(result.stdout)
@@ -382,7 +386,7 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
         files_to_clean.append(output)
         if os.path.isfile(output):
             os.remove(output)
-        ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', acodec, '-b:a', audio_bitrate]
+        ffmpeg_cmd = [ffmpeg_exe, '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', acodec, '-b:a', audio_bitrate]
         if track is not None: # Optional audio track selection
             ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
         # https://superuser.com/questions/852400/properly-downmix-5-1-to-stereo-using-ffmpeg
@@ -444,7 +448,7 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
         if normalize:
             print('Normalizing audio (1st pass)')
             null_output = 'NUL' if platform.system() == 'Windows' else '/dev/null' # For pass 1, need to output to appropriate null depending on system
-            result = subprocess.run(['ffmpeg', '-i', output, '-filter:a', 'loudnorm=print_format=json', "-f", "null", null_output], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run([ffmpeg_exe, '-i', output, '-filter:a', 'loudnorm=print_format=json', "-f", "null", null_output], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             # Search stdout and stderr for the loudnorm params
             params = None
             if result.returncode == 0:
@@ -459,7 +463,7 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 if os.path.isfile(output2):
                     os.remove(output2)
                 # The size of the normalized audio is different from the initial one, so render to get the exact size
-                ffmpeg_cmd = ['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', acodec, '-filter:a', 'loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}'.format(params['input_i'], params['input_lra'], params['input_tp'], params['input_thresh']), '-b:a', audio_bitrate]
+                ffmpeg_cmd = [ffmpeg_exe, '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vn', '-acodec', acodec, '-filter:a', 'loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}'.format(params['input_i'], params['input_lra'], params['input_tp'], params['input_thresh']), '-b:a', audio_bitrate]
                 if track is not None: # Optional audio track selection
                     ffmpeg_cmd.extend(['-map', '0:a:{}'.format(track)])
                 if mixdown == MixdownMode.stereo:
@@ -502,7 +506,7 @@ def calculate_bitrate_compensation(duration, manual_compensation):
 # Return a dictionary of the available subtitles, with index as the key and language as the value
 def list_subtitles(input_filename):
     # ffprobe -loglevel error -select_streams s -show_entries stream=index:stream_tags=language -of csv=p=0
-    result = subprocess.run(["ffprobe","-v", "error", "-select_streams", "s", "-of", "csv=p=0", "-show_entries", "stream=index:stream_tags=language", input_filename], stdout=subprocess.PIPE, text=True)
+    result = subprocess.run([ffprobe_exe,"-v", "error", "-select_streams", "s", "-of", "csv=p=0", "-show_entries", "stream=index:stream_tags=language", input_filename], stdout=subprocess.PIPE, text=True)
     if result.returncode == 0:
         lines = result.stdout.splitlines()
         subs = dict()
@@ -519,7 +523,7 @@ def list_subtitles(input_filename):
 # Return a dictionary of the available audio tracks, with index as the key and language as the value
 def list_audio(input_filename):
     # ffprobe -show_entries stream=index:stream_tags=language -select_streams a -of compact=p=0:nk=1
-    result = subprocess.run(["ffprobe","-v", "error", "-show_entries", "stream=index:stream_tags=language", "-select_streams", "a", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
+    result = subprocess.run([ffprobe_exe,"-v", "error", "-show_entries", "stream=index:stream_tags=language", "-select_streams", "a", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
     if result.returncode == 0:
         lines = result.stdout.splitlines()
         tracks = dict()
@@ -637,7 +641,7 @@ def segment_video(input_filename : str, start, duration, full_video : bool, args
         raise RuntimeError("5.1(side) surround sound detected. --cut is not compatible with this audio track.")
 
     video_filter_graph, audio_filter_graph = build_cut_segments(start, duration, args) if args.cut is not None else build_concat_segments(start, args)
-    ffmpeg_args = ['ffmpeg', '-hide_banner', '-y']
+    ffmpeg_args = [ffmpeg_exe, '-hide_banner', '-y']
     if not full_video:
         ffmpeg_args.extend(['-ss', str(start), '-t', str(duration)])
     # Input file to process
@@ -667,7 +671,7 @@ def segment_video(input_filename : str, start, duration, full_video : bool, args
 def blackframe(input_filename, start, duration):
     print('Running blackframe detection')
     try:
-        result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vf', 'blackframe=threshold=96:amount=92', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run([ffmpeg_exe, '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vf', 'blackframe=threshold=96:amount=92', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode != 0:
             print(result.stderr.decode())
             raise RuntimeError('ffmpeg returned code {}'.format(result.returncode))
@@ -708,7 +712,7 @@ def blackframe(input_filename, start, duration):
 
 def cropdetect(input_filename, start, duration):
     print('Running cropdetect')
-    result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vf', 'cropdetect', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run([ffmpeg_exe, '-ss', str(start), '-t', str(duration), '-i', input_filename, '-vf', 'cropdetect', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(result.stderr.decode())
         raise RuntimeError('ffmpeg returned code {}'.format(result.returncode))
@@ -726,7 +730,7 @@ def cropdetect(input_filename, start, duration):
 
 def silencedetect(input_filename, start, duration):
     print('Running silencedetect')
-    result = subprocess.run(['ffmpeg', '-ss', str(start), '-t', str(duration), '-i', input_filename, '-af', 'silencedetect=n=-50dB:d=1.4', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run([ffmpeg_exe, '-ss', str(start), '-t', str(duration), '-i', input_filename, '-af', 'silencedetect=n=-50dB:d=1.4', '-f', 'null', null_output, '-v', 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(result.stderr.decode())
         raise RuntimeError('ffmpeg returned code {}'.format(result.returncode))
@@ -1164,7 +1168,7 @@ def process_video(input_filename, start, duration, args, full_video):
             files_to_clean.append(output_subs)
             if os.path.exists(output_subs):
                 os.remove(output_subs)
-            result = subprocess.run(['ffmpeg', '-i', input_filename, '-map', '0:s:{}'.format(sub_idx), output_subs], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run([ffmpeg_exe, '-i', input_filename, '-map', '0:s:{}'.format(sub_idx), output_subs], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if result.returncode != 0:
                 print(result.stderr)
                 raise RuntimeError("Error rendering subtitles. ffmpeg returned {}".format(result.returncode))
@@ -1232,7 +1236,7 @@ def process_video(input_filename, start, duration, args, full_video):
     else:
         raise RuntimeError("Invalid codec option '{}'".format(args.codec))
     print('Target bitrate: {}'.format(video_bitrate))
-    video_codec.extend(["-b:v", video_bitrate, "-async", "1", "-vsync", "2"])
+    video_codec.extend(["-b:v", video_bitrate, "-async", "1", "-fps_mode", "vfr"])
     
     audio_codec = []
     if no_audio:
