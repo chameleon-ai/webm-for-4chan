@@ -30,7 +30,8 @@ It's a simple wrapper for ffmpeg. A precise file size is determined by first ren
 ## Installation and Dependencies
 As long as you have python, you're good to go. No requirements.txt needed.\
 This script just uses the python standard library and makes system calls to ffmpeg and ffprobe.\
-Make sure ffmpeg and ffprobe are accessible from your path, that's it.
+Make sure ffmpeg and ffprobe are accessible from your path, that's it.\
+If ffmpeg is not in your system path or you want to specify an alternate, edit `ffmpeg_path = None` at the top of the script, e.g. `ffmpeg_path = '/home/your/custom/path'`
 
 On Linux, I recommend adding an alias for easy access, something like this:\
 `alias webm-for-4chan="python /path/to/webm-for-4chan/webm_for_4chan.py"`
