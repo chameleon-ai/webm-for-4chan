@@ -75,7 +75,8 @@ bitrate_compensation_map = { # Automatic bitrate compensation, in kbps. This val
     240.0: 0,
     300.0: 2,
     360.0: 3,
-    400.0: 4
+    380.0: 4,
+    400.0: 6
 }
 mixdown_stereo_threshold = 96 # Automatically mixdown to stereo if audio bitrate <= this value
 mixdown_mono_threshold = 64 # Automatically mixdown to mono if audio bitrate <= this value
