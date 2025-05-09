@@ -9,6 +9,7 @@ import argparse
 import datetime
 from enum import Enum
 import json
+import locale
 import math
 import mimetypes
 import os
@@ -865,7 +866,7 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
     print(' '.join(pass2))
     if not dry_run:
         # Use popen so we can pend on completion
-        pope = subprocess.Popen(pass2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        pope = subprocess.Popen(pass2, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding='utf-8', errors='ignore')
         for line in iter(pope.stderr.readline, ""):
             if 'frame=' in line:
                 print('\r' + line.strip(), end='')
@@ -1325,7 +1326,7 @@ def image_audio_combine(input_image, input_audio, args):
     print(' '.join(ffmpeg_args))
     if not args.dry_run:
         # Use popen so we can pend on completion
-        pope = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        pope = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding='utf-8', errors='ignore')
         for line in iter(pope.stderr.readline, ""):
             if 'frame=' in line:
                 print('\r' + line.strip(), end='')
@@ -1407,7 +1408,7 @@ def audio_replace(video_input, audio_input, args):
     print(' '.join(ffmpeg_args))
     if not args.dry_run:
         # Use popen so we can pend on completion
-        pope = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        pope = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding='utf-8', errors='ignore')
         for line in iter(pope.stderr.readline, ""):
             if 'frame=' in line:
                 print('\r' + line.strip(), end='')
