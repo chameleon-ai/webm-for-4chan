@@ -9,7 +9,6 @@ import argparse
 import datetime
 from enum import Enum
 import json
-import locale
 import math
 import mimetypes
 import os
