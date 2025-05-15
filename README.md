@@ -11,8 +11,8 @@ Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want
 - Automatic resolution scaling
 - Automatic audio bit-rate reduction based on length
 - Automatic stereo or mono mixdown based on audio bit-rate
-- (optional) Automatic volume normalization
-- (optional) Automatic cropping
+- Volume normalization
+- Automatic cropping (remove black bars)
 - Precise clipping to the nearest millisecond
 - Cut segments out of the middle of the video
 - Concatenate segments from different parts of the video
@@ -23,6 +23,7 @@ Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want
 - Music mode optimized for songs
 - Combine static image with audio
 - Add/replace audio without re-encoding video
+- yt-dlp integration (experimental)
 
 ## How Does it Work?
 It's a simple wrapper for ffmpeg. A precise file size is determined by first rendering the audio, then calculating a target video bit-rate in kbps using the remaining space not taken up by the audio. Then, using 2-pass encoding, it's up to ffmpeg to hit the target size exactly. It's usually very good at hitting the target size without going over, but it's not perfect.
@@ -31,7 +32,9 @@ It's a simple wrapper for ffmpeg. A precise file size is determined by first ren
 As long as you have python, you're good to go. No requirements.txt needed.\
 This script just uses the python standard library and makes system calls to ffmpeg and ffprobe.\
 Make sure ffmpeg and ffprobe are accessible from your path, that's it.\
-If ffmpeg is not in your system path or you want to specify an alternate, edit `ffmpeg_path = None` at the top of the script, e.g. `ffmpeg_path = '/home/your/custom/path'`
+If ffmpeg is not in your system path or you want to specify an alternate, edit `ffmpeg_path = None` at the top of the script, e.g. `ffmpeg_path = '/home/your/custom/path'`\
+For optional [yt-dlp](https://github.com/yt-dlp/yt-dlp) support, make sure yt-dlp is in your system path or edit `ytdlp_path = None` at the top of the script.\
+(yt-dlp is not a hard dependency, it is only used if you specify a url to download)
 
 On Linux, I recommend adding an alias for easy access, something like this:\
 `alias webm-for-4chan="python /path/to/webm-for-4chan/webm_for_4chan.py"`
@@ -50,6 +53,9 @@ Replace the video's audio (or add audio to a video without sound):\
 `python webm_for_4chan.py --audio_replace video.webm audio.mp3`\
 Note that this is a special mode where the video is copied, not re-encoded. The duration is limited to the video length.
 
+Download a video using yt-dlp and encode it:\
+`python webm_for_4chan.py https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
 Use `-o`/`--output` to specify a custom file name.
 
@@ -60,6 +66,7 @@ However, the script will attempt to parse arguments without flags using context 
 - If the argument is a single timestamp, it's treated as a duration (`python webm_for_4chan.py input.mp4 30` is equivalent to `python webm_for_4chan.py input.mp4 -d 30`)
 - If the argument is two timestamps, the lesser is treated as the start time and the greater is the end time (`python webm_for_4chan.py input.mp4 30 45` is equivalent to `python webm_for_4chan.py input.mp4 -s 30 -e 45`)
 - If the argument is a timestamp segment (timestamps separated by a dash, `1:00-2:00`), it's treated as a `-c`/`--concat` segment. (`python webm_for_4chan.py input.mp4 30-45` is equivalent to `python webm_for_4chan.py input.mp4 -c 30-45`)
+- If the argument is a url, it's treated as the `--download` parameter. The script will then invoke yt-dlp to download the url.
 
 ### Clipping
 Use `-s`/`--start` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.\
@@ -135,6 +142,13 @@ To set the size limit to 4MiB, 120 seconds with no sound, use `--board other`\
 Remove sound altogether with `--no_audio`\
 Manually set the file size limit, in MiB, with `--size`, i.e. `--size 5` will target a 5 MiB file.\
 Reduce the target bit-rate with `-b`/`--bitrate-compensation`, i.e. `-b 5` will subtract 5 kbps from the automatically calculated bit-rate. This will cause a slight reduction in file size.
+
+### yt-dlp Integration
+To download and encode a video, simply specify the url in the command line or use `--download`\
+Timestamp arguments (`--start`/`--end`/`--duration`) will be passed to yt-dlp and the clip will be made directly from the download.\
+(This means that the video encoder will be invoked to encode the full video)\
+The script attempts to detect if the file has already been downloaded. If it has, it will not ask yt-dlp to download it again.\
+The `--download_full` flag will download the full video, ignoring the `--start` and `--end` timestamps when downloading.
 
 ### Miscellaneous Features
 Make an .mp4 instead  of .webm with the `--mp4` flag or `--codec libx264`\
