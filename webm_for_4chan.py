@@ -134,6 +134,8 @@ def is_url(arg : str) -> bool:
 def download_video(url : str, args) -> str:
     print(f'Attempting to download {url}')
     ytdl_cmd = [ytdlp_exe, url]
+    if args.ytdlp_args is not None: # Add custom command-line args
+        ytdl_cmd.extend(args.ytdlp_args.split())
 
     # Need to know whether or not to download only segments
     start = parsetime(args.start)
@@ -152,7 +154,7 @@ def download_video(url : str, args) -> str:
                 args.concat = new_segments
             elif args.cut is not None:
                 args.cut = new_segments
-    end = seg_end.total_seconds() if seg_end is not None else parsetime(args.end).total_seconds() if args.end is not None else start + parsetime(args.duration).total_seconds() if args.duration is not None else 'inf'
+    end = seg_end.total_seconds() if seg_end is not None else parsetime(args.end).total_seconds() if args.end is not None else (start + parsetime(args.duration)).total_seconds() if args.duration is not None else 'inf'
     if (not args.download_full) and (start.total_seconds() > 0.0 or (end != 'inf')):
         ytdl_cmd.extend(['--force-keyframes-at-cuts', '--download-sections', f'*{start.total_seconds()}-{end}'])
         # Reset the passed-in start and duration arguments so that the full video is post-processed
@@ -1533,6 +1535,7 @@ if __name__ == '__main__':
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
         parser.add_argument('--download', type=str, help="Download the video using yt-dlp.")
         parser.add_argument('--download_full', action='store_true', help="Download the full video before processing (otherwise only the clip bounded by --start and --end/--duration is downloaded).")
+        parser.add_argument('--ytdlp_args', type=str, help="Custom arguments to pass through to yt-dlp")
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
         parser.add_argument('--first_second_every_minute', action='store_true', help='Take 1 second from every minute of the input.')

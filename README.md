@@ -148,7 +148,8 @@ To download and encode a video, simply specify the url in the command line or us
 Timestamp arguments (`--start`/`--end`/`--duration`) will be passed to yt-dlp and the clip will be made directly from the download.\
 (This means that the video encoder will be invoked to encode the full video)\
 The script attempts to detect if the file has already been downloaded. If it has, it will not ask yt-dlp to download it again.\
-The `--download_full` flag will download the full video, ignoring the `--start` and `--end` timestamps when downloading.
+The `--download_full` flag will download the full video, ignoring the `--start` and `--end` timestamps when downloading.\
+Use `--ytdlp_args` to pass through custom arguments directly to yt-dlp, i.e. `--ytdlp_args "-S codec:h264"`
 
 ### Miscellaneous Features
 Make an .mp4 instead  of .webm with the `--mp4` flag or `--codec libx264`\
