@@ -157,6 +157,7 @@ def download_video(url : str, args) -> str:
     end = seg_end.total_seconds() if seg_end is not None else parsetime(args.end).total_seconds() if args.end is not None else (start + parsetime(args.duration)).total_seconds() if args.duration is not None else 'inf'
     if (not args.download_full) and (start.total_seconds() > 0.0 or (end != 'inf')):
         ytdl_cmd.extend(['--force-keyframes-at-cuts', '--download-sections', f'*{start.total_seconds()}-{end}'])
+        ytdl_cmd.extend(['--downloader-args', 'ffmpeg:-crf 20 -b:a 256k']) # Note: most youtube audio is 128k and can be up to 256k
         # Reset the passed-in start and duration arguments so that the full video is post-processed
         args.start = '0.0'
         args.end = None
