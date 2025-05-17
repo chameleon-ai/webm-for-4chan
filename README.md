@@ -6,6 +6,21 @@ Developed on Linux, probably works on Windows.
 
 Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want to learn more about webms in general.
 
+- [Features](#features)
+- [How Does it Work?](#how-does-it-work)
+- [Installation and Dependencies](#installation-and-dependencies)
+- [Usage](#usage)
+  - [Context Specific Arguments](#context-specific-arguments)
+  - [Clipping](#clipping)
+  - [Subtitle Burn-in](#subtitle-burn-in)
+  - [Cutting or Concatenating Segments](#cutting-or-concatenating-segments)
+  - [Trimming Silence](#trimming-silence)
+  - [Changing Target Size and Removing Sound](#changing-target-size-and-removing-sound)
+  - [yt-dlp Integration](#yt-dlp-integration)
+  - [Miscellaneous Features](#miscellaneous-features)
+- [Extra Notes and Quirks](#extra-notes-and-quirks)
+- [Tips, Tricks, and References](#tips-tricks-and-references)
+
 ## Features
 - Precise size calculation, designed to render webms just under the size limit
 - Automatic resolution scaling
