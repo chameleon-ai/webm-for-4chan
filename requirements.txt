@@ -21,6 +21,7 @@ ml_collections
 pystoi
 
 # transcribe
+git+https://github.com/openai/whisper.git; python_version>='3.13'
 whisper-timestamped
 googletrans
 auditok
