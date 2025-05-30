@@ -1,0 +1,4 @@
+[submodule "advanced/ultimatevocalremovergui"]
+	path = advanced/ultimatevocalremovergui
+	url = https://github.com/Anjok07/ultimatevocalremovergui
+	ignore = untracked

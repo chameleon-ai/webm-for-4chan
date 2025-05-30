@@ -3,3 +3,12 @@
 *.ods
 *.ass
 *.log
+*.wav
+*.mkv
+*.mp3
+*.json
+*.srt
+*.vtt
+venv/
+advanced/__pycache__/
+models/
