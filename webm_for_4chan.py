@@ -729,7 +729,7 @@ def segment_video(input_filename : str, start, duration, full_video : bool, args
     ffmpeg_args.extend(['-filter_complex', video_filter_graph + ';' + audio_filter_graph, '-map', '[outv]', '-map', '[outa]'])
 
     # Encoder. This is used to generate a temporary file.
-    ffmpeg_args.extend(["-c:v", "libx265", "-x265-params", "lossless=1"])
+    ffmpeg_args.extend(["-c:v", "libx264", "-preset", "ultrafast", "-qp", "0"])
     ffmpeg_args.extend(["-c:a", "libopus", "-b:a", "512k"])
     
     # Output file
@@ -949,6 +949,7 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
                 print('\r' + line.strip(), end='')
             else:
                 print(line, end='')
+        print('')
         pope.stderr.close()
         pope.wait()
         if pope.returncode != 0:
@@ -1689,8 +1690,6 @@ if __name__ == '__main__':
         else:
             print('Input file not found: "' + input_filename + '"')
     except argparse.ArgumentError as e:
-        print(e)
-    except ValueError as e:
         print(e)
     except Exception:
         print(traceback.format_exc())
