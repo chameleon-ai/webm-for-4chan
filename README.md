@@ -64,4 +64,3 @@ In an effort to reduce file size, audio analysis will be run that compares the t
   - `--bgm_gain` will adjust the volume of the bgm track in dB. Usually if you're using loud music over quiet talking I recommend something like `--bgm_gain -12`
   - Note that the input video stream is copied, not re-encoded. Only the audio is processed.
   - The standard method of calculating the output audio bitrate applies here. You can override it with `--music_mode` or `--audio_rate`.
-

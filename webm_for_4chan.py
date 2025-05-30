@@ -13,6 +13,7 @@ import math
 import mimetypes
 import os
 import platform
+import re
 import signal
 import subprocess
 import time
@@ -22,6 +23,8 @@ ffmpeg_path = None # Edit this if you want to specify a custom path to ffmpeg
 ffprobe_path = ffmpeg_path # Usually you should not have to edit this
 ffmpeg_exe = os.path.join(ffmpeg_path, 'ffmpeg') if ffmpeg_path else 'ffmpeg'
 ffprobe_exe = os.path.join(ffprobe_path, 'ffprobe') if ffprobe_path else 'ffprobe'
+ytdlp_path = None # Edit this if you want to specify a custom path to yt-dlp
+ytdlp_exe = os.path.join(ytdlp_path, 'yt-dlp') if ytdlp_path else 'yt-dlp'
 max_bitrate = 2800 # (kbps) Cap bitrate in case the clip is really short. This is already an absurdly high rate.
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
 max_duration = [400, 300, 120] # Maximum clip durations, in seconds [wsg, gif, all other boards]
@@ -110,6 +113,82 @@ def get_video_duration(input_filename, start_time : float):
     duration_seconds = float(result.stdout)
     return datetime.timedelta(seconds=duration_seconds - start_time)
 
+# Format a timedelta into hh:mm:ss.ms
+def format_timedelta(ts : datetime.timedelta):
+    hours, rm_hr = divmod(ts.total_seconds(), 3600)
+    mins, rm_min = divmod(rm_hr, 60)
+    sec, rm_sec = divmod(rm_min, 1)
+    # Omit leading zero hours and minutes
+    if int(hours) == 0:
+        if int(mins) == 0:
+            ts_str = '{:02}.{:03}'.format(int(sec), int(rm_sec*1000))
+        else:
+            ts_str = '{:02}:{:02}.{:03}'.format(int(mins), int(sec), int(rm_sec*1000))
+    else:
+        ts_str = '{:02}:{:02}:{:02}.{:03}'.format(int(hours), int(mins), int(sec), int(rm_sec*1000))
+    return ts_str
+
+def is_url(arg : str) -> bool:
+    return re.match(r'(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)', arg) is not None
+
+def download_video(url : str, args) -> str:
+    print(f'Attempting to download {url}')
+    ytdl_cmd = [ytdlp_exe, url]
+    if args.ytdlp_args is not None: # Add custom command-line args
+        ytdl_cmd.extend(args.ytdlp_args.split())
+
+    # Need to know whether or not to download only segments
+    start = parsetime(args.start)
+    seg_end = None
+    if (not args.download_full) and (args.concat is not None or args.cut is not None):
+        # cut and concat segments potentially need to be modified to match 
+        segments = parse_segments(start, args.concat if args.concat is not None else args.cut, do_print=False)
+        if args.concat is not None and len(segments) == 1:
+            start, seg_end = segments[0]
+            args.concat = None # Erase processed concat segment so that it doesn't mess up video conversion
+        elif start.total_seconds() > 0.0:
+            # The segment is passed in as an absolute timestamp, but downloading a chunk messes up
+            # the segment relative time, so the segment timing needs to be re-adjusted.
+            new_segments = ';'.join([f'{format_timedelta(start_seg)}-{format_timedelta(end_seg)}' for start_seg, end_seg in segments])
+            if args.concat is not None:
+                args.concat = new_segments
+            elif args.cut is not None:
+                args.cut = new_segments
+    end = seg_end.total_seconds() if seg_end is not None else parsetime(args.end).total_seconds() if args.end is not None else (start + parsetime(args.duration)).total_seconds() if args.duration is not None else 'inf'
+    if (not args.download_full) and (start.total_seconds() > 0.0 or (end != 'inf')):
+        ytdl_cmd.extend(['--force-keyframes-at-cuts', '--download-sections', f'*{start.total_seconds()}-{end}'])
+        if start.total_seconds() == 0.0: # Optimization for clips that start at the beginning of the video.
+            ytdl_cmd.extend(['--downloader-args', 'ffmpeg:-c:v copy -c:a copy']) 
+        else:
+            ytdl_cmd.extend(['--downloader-args', 'ffmpeg:-crf 20 -b:a 256k']) # Note: most youtube audio is 128k and can be up to 256k
+        # Reset the passed-in start and duration arguments so that the full video is post-processed
+        args.start = '0.0'
+        args.end = None
+        args.duration = None
+    print(' '.join(ytdl_cmd))
+    ytdl_cmd1 = ytdl_cmd.copy()
+    ytdl_cmd1.extend([ '-j'])
+    # The first one is a simulated run just to get the prospective filename
+    result = subprocess.run(ytdl_cmd1, stdout=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        print(result.stdout)
+        print('yt-dlp returned error code {}'.format(result.returncode))
+        return None
+    # Outputs the frame rate as a precise fraction. Have to convert to decimal.
+    result_json = json.loads(result.stdout)
+    result_filename = result_json['filename']
+    print(f'Downloading to "{result_filename}"')
+    if os.path.isfile(result_filename):
+        print('File already found. Skipping download.')
+    else:
+        pope = subprocess.Popen(ytdl_cmd, stdout=subprocess.PIPE, universal_newlines=True, encoding='utf-8', errors='ignore')
+        for line in iter(pope.stdout.readline, ""):
+            if '[download]' in line and '%' in line:
+                print('\r' + line.strip(), end='')
+            else:
+                print(line, end='')
+    return result_filename
+
 # Determines if the argument is a parsable timestamp
 def is_timestamp(arg : str):
     if arg.isnumeric():
@@ -128,7 +207,6 @@ def is_timestamp(arg : str):
 
 # Determines if the argument is a segment (i.e. a collection of timestamps used by --cut or --concat)
 def is_segment(arg : str):
-    print('aa')
     for tok in arg.split(';'): # Segments can be split by semicolon
         if '-' not in tok:
             return False # Segments need to be separated by a dash
@@ -886,14 +964,6 @@ def first_second_every_minute(start : datetime.timedelta, duration : datetime.ti
         current_time += datetime.timedelta(minutes=1)
     return ';'.join(segments)
 
-# Format a timedelta into hh:mm:ss.ms
-def format_timedelta(ts : datetime.timedelta):
-    hours, rm_hr = divmod(ts.total_seconds(), 3600)
-    mins, rm_min = divmod(rm_hr, 60)
-    sec, rm_sec = divmod(rm_min, 1)
-    ts_str = '{:02}:{:02}:{:02}.{:03}'.format(int(hours), int(mins), int(sec), int(rm_sec*1000))
-    return ts_str
-
 def get_mixdown_mode(audio_kbps, audio_track, mixdown : MixdownMode):
     if mixdown == MixdownMode.auto:
         if audio_kbps <= mixdown_mono_threshold:
@@ -1549,6 +1619,9 @@ if __name__ == '__main__':
         parser.add_argument('--codec', type=str, default='libvpx-vp9', choices=['libvpx-vp9','libx264'], help='Video codec to use. Default is libvpx-vp9.')
         parser.add_argument('--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
+        parser.add_argument('--download', type=str, help="Download the video using yt-dlp.")
+        parser.add_argument('--download_full', action='store_true', help="Download the full video before processing (otherwise only the clip bounded by --start and --end/--duration is downloaded).")
+        parser.add_argument('--ytdlp_args', type=str, help="Custom arguments to pass through to yt-dlp")
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
         parser.add_argument('--first_second_every_minute', action='store_true', help='Take 1 second from every minute of the input.')
@@ -1643,6 +1716,8 @@ if __name__ == '__main__':
                     elif is_segment(arg):
                         args.concat = arg
                         print('Treating {} as a --concat segment'.format(arg))
+                    elif is_url(arg):
+                        args.download = arg
                     else:
                         print("Unable to parse argument: '{}'".format(arg))
                         print('Please command-line flags to specify complex arguments')
@@ -1665,12 +1740,16 @@ if __name__ == '__main__':
                 else:
                     print('Argument parsing failed. Too many timestamps specified.')
                     exit(0)
-            if input_filename is None:
-                print('No input filename found.')
         else:
             parser.print_help() # Can't identify the input file
             exit(0)
+        if args.download is not None:
+            input_filename = download_video(args.download, args)
+            if input_filename is None:
+                print('Unable to download video.')
+                exit(0)
         if input_filename is None:
+            print('No input filename found.')
             parser.print_help()
             exit(0)
         if os.path.isfile(input_filename):
