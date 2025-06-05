@@ -16,8 +16,8 @@ import platform
 import re
 import signal
 import subprocess
-import time
 import traceback
+from sys import exit
 
 ffmpeg_path = None # Edit this if you want to specify a custom path to ffmpeg
 ffprobe_path = ffmpeg_path # Usually you should not have to edit this
@@ -108,6 +108,9 @@ def get_temp_filename(extension : str):
 
 # This is only called if you don't specify a duration or end time. Uses ffprobe to find out how long the input is.
 def get_video_duration(input_filename, start_time : float):
+    mime, subtype = mimetypes.guess_type(input_filename)[0].split('/')
+    if mime != 'video':
+        raise RuntimeError(f"Unsupported mime type '{mime}/{subtype}' for input file '{input_filename}'")
     # https://superuser.com/questions/650291/how-to-get-video-duration-in-seconds
     result = subprocess.run([ffprobe_exe,"-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_filename], stdout=subprocess.PIPE, text=True)
     duration_seconds = float(result.stdout)
@@ -134,9 +137,10 @@ def is_url(arg : str) -> bool:
 def download_video(url : str, args) -> str:
     print(f'Attempting to download {url}')
     ytdl_cmd = [ytdlp_exe, url]
+    if args.auto_subs: # This should result in embedding subs into the video, so --auto_subs will pick up and use the first sub track
+        ytdl_cmd.extend(['--embed-subs', '--write-automatic-subs'])
     if args.ytdlp_args is not None: # Add custom command-line args
         ytdl_cmd.extend(args.ytdlp_args.split())
-
     # Need to know whether or not to download only segments
     start = parsetime(args.start)
     seg_end = None
@@ -1243,7 +1247,7 @@ def process_video(input_filename, start, duration, args, full_video):
         out_size = os.path.getsize(output)
         print('output file size: {} KB'.format(int(out_size/1024)))
         if out_size > size_limit:
-            print('WARNING: Output size exceeded target maximum {}. You should rerun with --bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
+            print('WARNING: Output size exceeded target maximum {}. You should rerun with -b/--bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
     return output
 
 # Figures out which input is image and which is audio. Returns (image, audio), which may be None if image or audio couldn't be found.
@@ -1261,7 +1265,7 @@ def get_image_audio_inputs(args : list):
         elif category == 'audio':
             audio = filename
         else:
-            raise RuntimeError("Unsupported mime type '{}' for input file '{}'".format(type, encoding, filename))
+            raise RuntimeError(f"Unsupported mime type '{type}/{encoding}' for input file '{filename}'")
     return image, audio
 
 # Special mode for combining a static image (or animated gif) with an audio file
@@ -1428,7 +1432,7 @@ def get_video_audio_inputs(args : list):
         elif category == 'audio':
             audio = filename
         else:
-            raise RuntimeError("Unsupported mime type '{}' for input file '{}'".format(type, encoding, filename))
+            raise RuntimeError(f"Unsupported mime type '{type}/{encoding}' for input file '{filename}'")
     return video, audio
 
 def audio_replace(video_input, audio_input, args):
