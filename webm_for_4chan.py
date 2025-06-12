@@ -313,6 +313,15 @@ def scale_to_even(original_width, original_height, scaled_width, scaled_height):
         #print("{}x{}".format(width, height))
     return int(max(height, width))
 
+def get_video_resolution(input_filename : str):
+    result = subprocess.run([ffprobe_exe,"-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", input_filename], stdout=subprocess.PIPE, text=True)
+    if result.returncode == 0:
+        width, height = [int(x) for x in result.stdout.strip().split(',')]
+        return width, height
+    else:
+        print(result.stdout)
+        raise RuntimeError(f'ffprobe returned error code {result.returncode}')
+
 # Use the lookup table to find the highest resolution under the pre-defined durations in the table
 def calculate_target_resolution(duration, input_filename, target_bitrate, resizing_mode : ResizeMode, bypass_resolution_table : bool):
     if str(resizing_mode) != 'table':
@@ -836,11 +845,82 @@ def silencedetect(input_filename, start, duration):
     if silence_start is not None and silence_end is None:
         silence_segments.append(silence_start,start+duration)
     return silence_segments
-    
+
+def split_string_by_length(input_string : str, max_length : int):
+    words = input_string.split()  # Split the string into words
+    result = []
+    current_chunk = ""
+
+    for word in words:
+        # Check if adding the next word exceeds the max_length
+        if len(current_chunk) + len(word) + (1 if current_chunk else 0) <= max_length:
+            # If current_chunk is not empty, add a space before the word
+            if current_chunk:
+                current_chunk += " "
+            current_chunk += word
+        else:
+            # If it exceeds, append the current_chunk to the result and start a new chunk
+            result.append(current_chunk)
+            current_chunk = word  # Start a new chunk with the current word
+
+    # Append any remaining words in current_chunk to the result
+    if current_chunk:
+        result.append(current_chunk)
+
+    return result
+
+def caption(text : str, font : str, input_filename: str, resolution : int):
+    # input video width
+    video_width, video_height = get_video_resolution(input_filename)
+    max_dimension = max(video_width, video_height)
+    if resolution is None:
+        resolution = max_dimension
+    elif resolution > max_dimension:
+        resolution = max_dimension
+    scale_factor = resolution / max_dimension if resolution is not None else 1
+    # output video width
+    output_width = int(resolution if video_width > video_height else video_width * scale_factor)
+    #print(f'{video_width} {video_height} {output_width}')
+    filters = []
+    # Text itself, along with appropriate height offsets
+    fontsize = 38
+    height_per_line = 56
+    width_per_character = 18
+    max_width = int(output_width / width_per_character)
+    y = 8
+    # Need to divide text into multiple lines if necessary
+    presplit_lines = text.split('\\n') # User escape sequence of newline
+    lines = []
+    for line in presplit_lines:
+        lines.extend(split_string_by_length(line, max_width))
+    total_lines = len(lines)
+    # Padding box to contain the text
+    pad_height = int(total_lines * height_per_line)
+    filters.append(f"pad=w=iw:h=ih+{pad_height}:y={pad_height}:color=white")
+    escape_sequences = {
+        "'": "'\\\\\\''", # Escape single quotes
+        ":": "\\\\\\:", # Escape colon
+        "%": "\\\\\\%", # Escape percent
+    }
+    # Each line of text
+    for idx, line in enumerate(lines):
+        # Apply proper escape sequences
+        for old,new in escape_sequences.items():
+            line = line.replace(old,new)
+            #line = line.replace("'", "'\\\\\\''") # Escape single quotes
+        print(f'Caption line {idx}: {line}')
+        drawtext_cmd = f"drawtext=text='{line}':fontsize={fontsize}:x=(w-text_w)/2:y={y}"
+        if font is not None: # Add optional font
+            drawtext_cmd += f":font='{font}'"
+        filters.append(drawtext_cmd)
+        y += height_per_line
+    return ','.join(filters)
+
 # Convoluted method of determining the output file name. Avoid overwriting existing files, etc.
-def get_output_filename(input_filename, args):
+def get_output_filename(input_filename, args, suffix = None):
     # Use manually specified output
-    suffix = '.webm' if args.codec == 'libvpx-vp9' else '.mp4'
+    if suffix is None:
+        suffix = '.webm' if args.codec == 'libvpx-vp9' else '.mp4'
     if args.output is not None:
         output = args.output
         # Force webm suffix
@@ -868,6 +948,26 @@ def get_output_filename(input_filename, args):
                 filename_count += 1 # Try to deconflict the file name by finding a different file name
             else:
                 return final_output
+
+def gif_caption(input_filename : str, args):
+    output_filename = get_output_filename(input_filename, args, '.gif')
+    ffmpeg_args = ["ffmpeg", '-hide_banner', '-i', input_filename]
+    ffmpeg_args.extend(['-vf', caption(args.caption, args.font, input_filename, None)])
+    ffmpeg_args.append(output_filename)
+    if not args.dry_run:
+        # Use popen so we can pend on completion
+        pope = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding='utf-8', errors='ignore')
+        for line in iter(pope.stderr.readline, ""):
+            if 'frame=' in line:
+                print('\r' + line.strip(), end='')
+            else:
+                print(line, end='')
+        print('')
+        pope.stderr.close()
+        pope.wait()
+        if pope.returncode != 0:
+            raise RuntimeError('ffmpeg returned code {}'.format(pope.returncode))
+    return output_filename  
 
 # The part where the webm is encoded
 def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mixdown : MixdownMode, mode : BoardMode, dry_run : bool):
@@ -1204,6 +1304,8 @@ def process_video(input_filename, start, duration, args, full_video):
         video_filters.append('fps={}'.format(fps))
     if args.video_filter is not None: # Arbitrary user-supplied filters
         video_filters.append(args.video_filter)
+    if args.caption is not None:
+        video_filters.append(caption(args.caption, args.font, input_filename, resolution))
     
     # Add audio filters
     audio_filters = []
@@ -1539,6 +1641,7 @@ if __name__ == '__main__':
         parser.add_argument('--blackframe', action='store_true', help="Skip initial black frames using a first pass with blackframe filter.")
         parser.add_argument('--board', '--mode', dest='board', type=BoardMode, default='wsg', choices=list(BoardMode), help='Webm convert mode. wsg=6MB with sound, gif=4MB with sound, other=4MB no sound')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
+        parser.add_argument('--caption', type=str, help='Caption text to add. Caption is rendered on top with a white background in "gif caption" meme format.')
         parser.add_argument('--codec', type=str, default='libvpx-vp9', choices=['libvpx-vp9','libx264'], help='Video codec to use. Default is libvpx-vp9.')
         parser.add_argument('--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
@@ -1548,6 +1651,7 @@ if __name__ == '__main__':
         parser.add_argument('--dry_run', action='store_true', help='Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed.')
         parser.add_argument('--fast', action='store_true', help='Render fast at the expense of quality. Not recommended except for testing.')
         parser.add_argument('--first_second_every_minute', action='store_true', help='Take 1 second from every minute of the input.')
+        parser.add_argument('--font', type=str, help="Font to use for captions.")
         parser.add_argument('--fps', type=float, help='Manual fps override.')
         parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
         parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
@@ -1668,6 +1772,14 @@ if __name__ == '__main__':
                     layout, no_audio = get_audio_layout(input_filename, idx) # Also list layout
                     print('{},{},{}'.format(idx, lang,layout))
                 exit(0)
+            if args.caption is not None:
+                mime, subtype = mimetypes.guess_type(input_filename)[0].split('/')
+                if subtype == 'gif':
+                    print('Running in gif caption mode.')
+                    result = gif_caption(input_filename, args)
+                    print('output file: "{}"'.format(result))
+                    cleanup()
+                    exit(0)
             start_time = parsetime(args.start)
             print('start time:', start_time)
             # Attempt to find the duration of the clip

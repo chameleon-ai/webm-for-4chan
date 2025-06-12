@@ -17,6 +17,7 @@ Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want
   - [Trimming Silence](#trimming-silence)
   - [Changing Target Size and Removing Sound](#changing-target-size-and-removing-sound)
   - [yt-dlp Integration](#yt-dlp-integration)
+  - [Gif Caption Mode](#gif-caption-mode)
   - [Miscellaneous Features](#miscellaneous-features)
 - [Extra Notes and Quirks](#extra-notes-and-quirks)
 - [Tips, Tricks, and References](#tips-tricks-and-references)
@@ -165,6 +166,15 @@ Timestamp arguments (`--start`/`--end`/`--duration`) will be passed to yt-dlp an
 The script attempts to detect if the file has already been downloaded. If it has, it will not ask yt-dlp to download it again.\
 The `--download_full` flag will download the full video, ignoring the `--start` and `--end` timestamps when downloading.\
 Use `--ytdlp_args` to pass through custom arguments directly to yt-dlp, i.e. `--ytdlp_args "-S codec:h264"`
+
+### Gif Caption Mode
+This mode writes text in "gif caption" meme format. That is, black text on a white background above the video or gif. Note that this is an experimental feature that is not guaranteed to work correctly. It uses the [drawtext](https://ffmpeg.org/ffmpeg-filters.html#drawtext-1) filter, which requires ffmpeg compiled with `--enable-libfreetype` `--enable-libharfbuzz` and `--enable-libfontconfig`
+- `--caption` takes in the caption text, which will be rendered using drawtext, i.e. `--caption "Hello world"`
+  - It will automatically word-wrap and center the text, but you can force a newline with `\n`, i.e. `--caption "Hello\nWorld"`
+  - You'll need to escape certain characters like exclamation mark `!` with a slash, i.e. `--caption "Hello World\!"`
+- `--font` takes the name of the font you want to use, i.e `--font Impact`
+- Note that caption mode also works for .gif files.
+- At this time, the font size is fixed and not configurable.
 
 ### Miscellaneous Features
 Make an .mp4 instead  of .webm with the `--mp4` flag or `--codec libx264`\
