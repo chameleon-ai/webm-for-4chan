@@ -109,7 +109,7 @@ def get_temp_filename(extension : str):
 # This is only called if you don't specify a duration or end time. Uses ffprobe to find out how long the input is.
 def get_video_duration(input_filename, start_time : float):
     mime, subtype = mimetypes.guess_type(input_filename)[0].split('/')
-    if mime != 'video':
+    if mime != 'video' and mime != 'audio':
         raise RuntimeError(f"Unsupported mime type '{mime}/{subtype}' for input file '{input_filename}'")
     # https://superuser.com/questions/650291/how-to-get-video-duration-in-seconds
     result = subprocess.run([ffprobe_exe,"-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_filename], stdout=subprocess.PIPE, text=True)
