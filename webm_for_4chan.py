@@ -1519,6 +1519,43 @@ def image_audio_combine(input_image, input_audio, args):
             print('WARNING: Output size exceeded target maximum {}. You should rerun with --bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
     return output
 
+def extract_png(input_filename : str):
+    output_filename = get_temp_filename('png')
+    # -frames:v 1 -update 1
+    ffmpeg_cmd = [ffmpeg_exe, '-hide_banner', '-i', input_filename, '-frames:v', '1', '-update', '1', output_filename ]
+    result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+    if result.returncode != 0 or not os.path.isfile(output_filename):
+        print(' '.join(ffmpeg_cmd))
+        print(result.stderr)
+        raise RuntimeError('Error exporting png. ffmpeg return code: {}'.format(result.returncode))
+    files_to_clean.append(output_filename)
+    return output_filename  
+
+def extract_audio(input_filename : str):
+    result = subprocess.run([ffprobe_exe,"-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", input_filename], stdout=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        print(result.stderr)
+        raise RuntimeError('Error determining audio codec. ffprobe return code: {}'.format(result.returncode))
+    acodec = result.stdout.strip()
+    output_ext = None
+    if acodec == 'opus':
+        output_ext = 'opus'
+    elif acodec == 'aac':
+        output_ext = 'aac'
+    elif acodec == 'mp3':
+        output_ext = 'mp3'
+    else:
+        raise RuntimeError(f'Unsupported audio codec "{acodec}"')
+    output_filename = get_temp_filename(output_ext)
+    ffmpeg_cmd = [ffmpeg_exe, '-hide_banner', '-i', input_filename, '-vn', '-c:a', 'copy', output_filename ]
+    result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+    if result.returncode != 0 or not os.path.isfile(output_filename):
+        print(' '.join(ffmpeg_cmd))
+        print(result.stderr)
+        raise RuntimeError('Error exporting png. ffmpeg return code: {}'.format(result.returncode))
+    files_to_clean.append(output_filename)
+    return output_filename
+
 # Figures out which input is video and which is audio. Returns the tuple (video, audio), which may be None if video or audio couldn't be found.
 def get_video_audio_inputs(args : list):
     mime_types = [ mimetypes.guess_type(x) + (x,) for x in args ]
@@ -1666,6 +1703,7 @@ if __name__ == '__main__':
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
         parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
         parser.add_argument('--size', '--limit', dest='size', type=float, help='Target file size limit, in MiB. Default is 6 if board is wsg, and 4 otherwise.')
+        parser.add_argument('--static_image', action='store_true', help="Treat video as a static image and use image+audio combine mode.")
         parser.add_argument('--stereo', action='store_true', help="Do stereo mixdown. Equivalent to --mixdown stereo")
         parser.add_argument('--sub_index', type=int, help="Subtitle index to burn-in (use --list_subs if you don't know the index)")
         parser.add_argument('--sub_lang', type=str, help="Subtitle language to burn-in, must be an exact match with what is listed in the file (use --list_subs if you don't know the language)")
@@ -1780,6 +1818,19 @@ if __name__ == '__main__':
                     print('output file: "{}"'.format(result))
                     cleanup()
                     exit(0)
+            if args.static_image:
+                print('Extracting static image from video...')
+                image_input = extract_png(input_filename)
+                print('Extracting audio...')
+                audio_input = extract_audio(input_filename)
+                print("Using image + audio combine mode.")
+                if args.output is None:
+                    args.output = get_output_filename(input_filename, args, '.webm')
+                    print(args.output)
+                result = image_audio_combine(image_input, audio_input, args)
+                print('output file: "{}"'.format(result))
+                cleanup()
+                exit(0)
             start_time = parsetime(args.start)
             print('start time:', start_time)
             # Attempt to find the duration of the clip

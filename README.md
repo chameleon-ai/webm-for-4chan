@@ -10,6 +10,7 @@ Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want
 - [How Does it Work?](#how-does-it-work)
 - [Installation and Dependencies](#installation-and-dependencies)
 - [Usage](#usage)
+  - [Music Webms](#music-webms)
   - [Context Specific Arguments](#context-specific-arguments)
   - [Clipping](#clipping)
   - [Subtitle Burn-in](#subtitle-burn-in)
@@ -59,21 +60,50 @@ On Windows, you can drag-and-drop the video onto a .bat file containing the foll
 `python C:\path\to\webm-for-4chan\webm_for_4chan.py "%~1"`
 
 ## Usage
-If the video is already clipped and ready to be converted, simply:\
-`python webm_for_4chan.py input.mp4`
+If the video is already clipped and ready to be converted, simply:
+```
+python webm_for_4chan.py input.mp4
+```
 
-Combine a static image (or animated gif) with audio:\
-`python webm_for_4chan.py image.png song.mp3`
+Combine a static image (or animated gif) with audio:
+```
+python webm_for_4chan.py image.png song.mp3
+```
 
-Replace the video's audio (or add audio to a video without sound):\
-`python webm_for_4chan.py --audio_replace video.webm audio.mp3`\
+Replace the video's audio (or add audio to a video without sound):
+```
+python webm_for_4chan.py --audio_replace video.webm audio.mp3
+```
+
 Note that this is a special mode where the video is copied, not re-encoded. The duration is limited to the video length.
 
-Download a video using yt-dlp and encode it:\
-`python webm_for_4chan.py https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+Download a video using yt-dlp and encode it:
+```
+python webm_for_4chan.py https://www.youtube.com/watch?v=dQw4w9WgXcQ
+```
 
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
 Use `-o`/`--output` to specify a custom file name.
+
+### Music Webms
+By default, webm-for-4chan chooses the lowest audio sample rate it can get away with. This is not desirable for music-oriented webms where sound comes first.
+There are several ways to make music webms:
+- Use the `--music_mode` flag. This will automatically pick a higher than normal audio rate:
+```
+python webm_for_4chan.py input.mp4 --music_mode
+```
+- Manually specify `--audio_rate`
+```
+python webm_for_4chan.py input.mp4 --audio_rate 128
+```
+- Use image + audio combine mode, which will result in the highest possible audio bitrate:
+```
+webm_for_4chan.py image.png song.mp3
+```
+- If you wish to pass a video into image + audio mode, use the `--static_image` flag.
+```
+python webm_for_4chan.py input.webm --static_image
+```
 
 ### Context Specific Arguments
 For advanced usage, use the standard command-line flags (`-b`, `-x`, `--auto_subs`, etc.)\
@@ -88,26 +118,43 @@ However, the script will attempt to parse arguments without flags using context 
 Use `-s`/`--start` to specify a starting timestamp and `-e`/`--end` to specify an ending timestamp.\
 Or specify `-c` to specify a segment (see section on Cutting or Concatenating Segments below).
 
-Clip the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:\
-`python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6`\
-Or using context specific arguments:\
-`python webm_for_4chan.py input.mp4 1:23:45.1 1:24:56.6`
+Clip the video starting at 1 hr 23 minutes 45.1 seconds and ending at 1 hr 24 minutes 56.6 seconds:
+```
+python webm_for_4chan.py input.mp4 -s 1:23:45.1 -e 1:24:56.6
+```
+Or using context specific arguments:
+```
+python webm_for_4chan.py input.mp4 1:23:45.1 1:24:56.6
+```
 
-Note that using `-c` with one segment is equivalent:\
-`python webm_for_4chan.py input.mp4 -c "1:23:45.1-1:24:56.6"`\
-Or using context specific arguments:\
-`python webm_for_4chan.py input.mp4 "1:23:45.1-1:24:56.6"`
+Note that using `-c` with one segment is equivalent:
+```
+python webm_for_4chan.py input.mp4 -c "1:23:45.1-1:24:56.6"
+```
+Or using context specific arguments:
+```
+python webm_for_4chan.py input.mp4 "1:23:45.1-1:24:56.6"
+```
 
-Specify a relative 2 minute duration using `-d`/`--duration`:\
-`python webm_for_4chan.py input.mp4 -s 1:23:45.1 -d 2:00`
+Specify a relative 2 minute duration using `-d`/`--duration`:
+```
+python webm_for_4chan.py input.mp4 -s 1:23:45.1 -d 2:00
+```
 
-Start time is 0:00 by default, so you can render the first minute of the clip like this:\
-`python webm_for_4chan.py input.mp4 -d 1:00`\
-Or using context specific arguments:\
-`python webm_for_4chan.py input.mp4 1:00`
+Start time is 0:00 by default, so you can render the first minute of the clip like this:
+```
+python webm_for_4chan.py input.mp4 -d 1:00`
+```
+Or using context specific arguments:
+```
+python webm_for_4chan.py input.mp4 1:00
+```
 
-End time is also calculated if not specified, so to render from the 5:30 mark until the end of the video:\
-`python webm_for_4chan.py input.mp4 -s 5:30`
+End time is also calculated if not specified, so to render from the 5:30 mark until the end of the video:
+```
+python webm_for_4chan.py input.mp4 -s 5:30
+```
+
 
 ### Subtitle Burn-in
 Render a 30 second anime clip with dual audio, select japanese audio and burn in english soft-subs:\
