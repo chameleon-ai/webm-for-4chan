@@ -236,6 +236,8 @@ Automatically burn-in the first available subtitles, if any exist, with `--auto_
 Print available built-in subtitles with  `--list_subs`\
 Print available audio tracks with  `--list_audio`\
 Specify arbitrary filters for ffmpeg with `-a`/`--audio_filter` and `-v`/`--video_filter`\
+Change the number of [B-frames](https://visionular.ai/what-are-b-frames-video-compression/) with `--bframe`. This increases compression performance at the cost of some computation time. By default, B-frames are enabled and set to auto (-1). Use `--bframes 0` to disable B-frames altogether.\
+If your hardware supports it, you can try [hardware acceleration](https://trac.ffmpeg.org/wiki/Hardware/VAAPI#Encode-only) with `--codec vp9_vaapi`. Note that support for this is experimental since I can't personally get it to work on my machine, so I can't confirm that this option works properly. Your hardware needs to support `VAProfileVP9Profile0 : VAEntrypointEncSlice` through [VA-API](https://en.wikipedia.org/wiki/Video_Acceleration_API).\
 For fun, try `--first_second_every_minute`, inspired by the youtube channel FirstSecondEveryMinute (Warning: This can take a while)\
 Keep generated temp files with `-k`/`--keep_temp_files`
 

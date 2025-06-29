@@ -920,7 +920,7 @@ def caption(text : str, font : str, input_filename: str, resolution : int):
 def get_output_filename(input_filename, args, suffix = None):
     # Use manually specified output
     if suffix is None:
-        suffix = '.webm' if args.codec == 'libvpx-vp9' else '.mp4'
+        suffix = '.webm' if (args.codec == 'libvpx-vp9' or args.codec == 'vp9_vaapi') else '.mp4'
     if args.output is not None:
         output = args.output
         # Force webm suffix
@@ -970,7 +970,7 @@ def gif_caption(input_filename : str, args):
     return output_filename  
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mixdown : MixdownMode, mode : BoardMode, dry_run : bool):
+def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mixdown : MixdownMode, mode : BoardMode, bframes : int, dry_run : bool):
     ffmpeg_args = ["ffmpeg", '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments
@@ -998,6 +998,9 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
     if vf_args != '': # Add video filter if there are any arguments
         ffmpeg_args.extend(["-vf", vf_args])
     ffmpeg_args.extend(video_codec)
+
+    if bframes != 0: # Add B-frames argument (default is 0 so it can be skipped if 0)
+        ffmpeg_args.extend(["-bf", str(bframes)])
 
     # The constructed ffmpeg commands
     pass1 = ffmpeg_args
@@ -1214,7 +1217,7 @@ def process_video(input_filename, start, duration, args, full_video):
         args.mixdown = get_mixdown_mode(audio_kbps, audio_track, args.mixdown) # Determine mixdown, if any
         print('Calculating audio size')
         # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
-        acodec = 'libopus' if args.codec == 'libvpx-vp9' else 'aac'
+        acodec = 'libopus' if (args.codec == 'libvpx-vp9' or args.codec == 'vp9_vaapi') else 'aac'
         audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.board, acodec, args.mixdown, args.normalize)
         print('Audio size: {}kB'.format(int(audio_size/1024)))
     size_limit = get_size_limit(args)
@@ -1329,6 +1332,9 @@ def process_video(input_filename, start, duration, args, full_video):
     elif args.codec == 'libx264':
         video_codec = ["-c:v", "libx264", "-preset", 'fast' if args.fast else 'slower']
         files_to_clean.append('ffmpeg2pass-0.log.mbtree') # This is the pass 1 file for h264
+    elif args.codec == 'vp9_vaapi':
+        video_codec = ["-vaapi_device", "/dev/dri/renderD128", "-c:v", "vp9_vaapi", "-bsf:v", "vp9_raw_reorder,vp9_superframe"]
+        video_filters.extend(['format=nv12','hwupload'])
     else:
         raise RuntimeError("Invalid codec option '{}'".format(args.codec))
     print('Target bitrate: {}'.format(video_bitrate))
@@ -1337,13 +1343,13 @@ def process_video(input_filename, start, duration, args, full_video):
     audio_codec = []
     if no_audio:
         audio_codec = ["-an"]
-    elif args.codec == 'libvpx-vp9':
+    elif args.codec == 'libvpx-vp9' or args.codec == 'vp9_vaapi':
         audio_codec = ["-c:a", "libopus", '-b:a', audio_bitrate]
     elif args.codec == 'libx264':
         audio_codec = ["-c:a", "aac", '-b:a', audio_bitrate]
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.mixdown, args.board, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.mixdown, args.board, args.bframes, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -1675,11 +1681,12 @@ if __name__ == '__main__':
         parser.add_argument('--audio_replace', action='store_true', help="Special mode that replaces the audio of a clip with other audio without modifying the video.")
         parser.add_argument('--auto_crop', action='store_true', help="Automatic crop using cropdetect.")
         parser.add_argument('--auto_subs', action='store_true', help="Automatically burn-in the first embedded subtitles, if they exist")
+        parser.add_argument('--bframes', type=int, default=-1, help="Number of B-frames to use in video encoding (passed as the -bf option).")
         parser.add_argument('--blackframe', action='store_true', help="Skip initial black frames using a first pass with blackframe filter.")
         parser.add_argument('--board', '--mode', dest='board', type=BoardMode, default='wsg', choices=list(BoardMode), help='Webm convert mode. wsg=6MB with sound, gif=4MB with sound, other=4MB no sound')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
         parser.add_argument('--caption', type=str, help='Caption text to add. Caption is rendered on top with a white background in "gif caption" meme format.')
-        parser.add_argument('--codec', type=str, default='libvpx-vp9', choices=['libvpx-vp9','libx264'], help='Video codec to use. Default is libvpx-vp9.')
+        parser.add_argument('--codec', type=str, default='libvpx-vp9', choices=['libvpx-vp9','libx264', 'vp9_vaapi'], help='Video codec to use. Default is libvpx-vp9.')
         parser.add_argument('--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
         parser.add_argument('--download', type=str, help="Download the video using yt-dlp.")
