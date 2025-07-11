@@ -10,6 +10,7 @@ Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want
 - [How Does it Work?](#how-does-it-work)
 - [Installation and Dependencies](#installation-and-dependencies)
 - [Usage](#usage)
+  - [Command Line Arguments Reference](#command-line-arguments-reference)
   - [Music Webms](#music-webms)
   - [Context Specific Arguments](#context-specific-arguments)
   - [Clipping](#clipping)
@@ -84,6 +85,63 @@ python webm_for_4chan.py https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
 Use `-o`/`--output` to specify a custom file name.
+
+### Command Line Arguments Reference
+
+| Flag        | Description | Example |
+| ----------- | ----------- | ----------- |
+| `-a` / `--audio_filter` | [Audio filter](https://ffmpeg.org/ffmpeg-filters.html#Audio-Filters) arguments. This string is passed directly to ffmpeg's -af chain. | `-a areverse` |
+| `--audio_index` | Audio track index to select for videos with multiple audio tracks (use `--list_audio` if you don't know the index). | `--audio_index 1` |
+| `--audio_lang` | Select audio track by language, must be an exact match with what is listed in the file (use `--list_audio` if you don't know the language). Note that the language metadata is often mislabeled, so it's more reliable to use `--audio_index` if you already know which track you want to select. | `--audio_lang jpn` |
+| `--audio_rate` | Manually specify audio bitrate in kbps. If not specified, it will be automatically determined based on video length. Note that audio rates 64k and below will be mixed down to mono unless `--no_mixdown` is specified. | `--audio_rate 96` |\
+| `--audio_replace` | Special mode that replaces the audio of a clip with other audio without modifying the video. | `--audio_replace input.mp3` |
+| `--auto_crop` | Automatic crop using [cropdetect](https://ffmpeg.org/ffmpeg-filters.html#cropdetect) (removes letterboxing). | `--auto_crop` |
+| `--auto_subs` | Automatically burn-in the first embedded subtitles, if they exist. | `--auto_subs` |
+| `-b` / `--bitrate_compensation` | Fixed value to subtract from target bitrate (kbps). Use if your output size is overshooting. | `-b 2` |
+| `--bframes` | Number of B-frames to use in video encoding (passed as the -bf option). Default is -1 (auto) | `--bframes 0` |
+| `--blackframe` | Skip initial black frames using a first pass with [blackframe](https://ffmpeg.org/ffmpeg-filters.html#blackframe) filter. | `--blackframe` |
+| `--board` / `--mode` | Target board, which adjusts the size and sound settings. wsg=6MB with sound, gif=4MB with sound, other=4MB no sound | `--board gif` |
+|`--bypass_resolution_table`| Do not snap to the nearest standard resolution and use raw calculated instead. | `--bypass_resolution_table` |
+|`-c` / `--concat` / `--clip` | Segments to concatenate (everything BUT these are cut), separated by "`;`". See [Clipping](#clipping) section of readme. | `-c "5:00-5:15;5:45-5:52.4"` |
+| `--caption` | Caption text to add. See [Gif Caption Mode](#gif-caption-mode) section of readme. | `--caption "hello world"` |
+| `--codec` | Video codec to use. The appropriate corresponding audio codec will be automatically selected. May be `libvpx-vp9`, `libx264`, or `vp9_vaapi`. Default is libvpx-vp9. | `--codec libx264` |
+| `--crop` | Crop the video. This string is passed directly to ffmpeg's [crop](https://ffmpeg.org/ffmpeg-filters.html#crop) filter. | `--crop "512:768:iw-512:ih-768"` |
+| `-d` / `--duration` | Clip duration timestamp. Automatically set to the full length of the video if `--start` or `--end` are not specified. | `-d 1:23` |
+| `--deadline` | The [-deadline](https://trac.ffmpeg.org/wiki/Encode/VP9#DeadlineQuality) argument passed to ffmpeg. Default is `good`. `best` is higher quality but significantly slower. | `--deadline best` |
+| `--download` | URL to download using yt-dlp. Use this if deducing the URL from a context specific argument fails. See the [yt-dlp Integration](#yt-dlp-integration) section of the readme. | `--download https://youtu.be/dQw4w9WgXcQ`  |
+| `--download_full` | Download the full video before processing (otherwise only the clip bounded by `--start` and `--end` / `--duration` is downloaded). | `--download_full` |
+| `--dry_run` | Make all the size calculations without encoding the webm. ffmpeg commands and bitrate calculations will be printed. | `--dry_run` |
+| `-e` / `--end` | Absolute end timestamp. Used instead of `-d` / `--duration`. Do not specify both `-e` and `-d`. | `-e 2:34` |
+| `--font` | Font to use when specifying `--caption`. | `--font Impact` |
+| `--fps` | Manual fps override. If not specified, fps will be automatically determined based on video length. | `--fps 24` |
+| `-i` / `--input` | Input file to process. Use this if deducing from a context specific argument fails. | `-i input.mp4` |
+| `-k` / `--keep_temp_files` | Keep temporary files like `temp.opus` and `temp.mkv` | `-k` |
+| `--list_audio` | List audio tracks and quit. Use if you don't know which `--audio_index` or `--audio_lang` to specify. | `--list_audio` |
+| `--list_subs` | List embedded subtitles and quit. Use if you don't know which `--sub_index` or `--sub_lang` to specify. | `--list_subs` |
+| `--mixdown` | Sound mixdown mode. Can be `auto`, `stereo`, `mono`, or `same_as_source`. Default = `auto` | `--mixdown stereo` |
+| `--mono` | Do mono mixdown. Equivalent to `--mixdown mono` | `--mono` |
+| `--mp4` | Make .mp4 instead of .webm (shortcut for --codec libx264) | `--mp4` |
+| `--music_mode` | Prioritize audio quality over visual quality. | `--music_mode` |
+| `-n` / `--normalize` | Enable 2-pass [audio normalization](https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg) | `-n` |
+| `--no_audio` | Encode without audio. | `--no_audio` |
+| `--no_duration_check` | Disable max duration check. | `--no_duration_check` |
+| `--no_resize` | Do not resize the output. | `--no_resize` |
+| `--no_mixdown` | Disable automatic audio mixdown. Equivalent to `--mixdown same_as_source` | `--no_mixdown` |
+| `--no_mt` | Disable [row based multithreading](https://trac.ffmpeg.org/wiki/Encode/VP9#rowmt) | `--no_mt` |
+| `-o` / `--output` | Output file name (If not specified, output is named after the input prepended with "`_1_`") | -o out.webm |
+| `-r` / `--resolution` | Manual resolution override. Applied as the maximum dimension both horizontal and vertical. If not specified, the resolution is automatically determined based on target bitrate. | `-r 1280` |
+| `--resize_mode` | May be `cubic`, `logarithmic`, or `table`. | `--resize_mode table` |
+| `-s` / `--start` | Absolute start timestamp. 0:00 if not specified. | `--start 3:45` |
+| `--size` / `--limit` | Target file size limit, in MiB. Default is 6 if board is wsg, and 4 otherwise. | `--size 2.5` |
+| `--static_image` | Treat video as a static image and use image+audio combine mode. | `--static_image` |
+| `--stereo` | Do stereo mixdown. Equivalent to `--mixdown stereo` | `--stereo` |
+| `--sub_index` | Subtitle index to burn-in (use `--list_subs` if you don't know the index) | `--sub_index` |
+| `--sub_lang` | Subtitle language to burn-in, must be an exact match with what is listed in the file (use `--list_subs` if you don't know the language) | `--sub_lang` |
+| `--sub_file` | Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs) | `--sub_file subs.ass` |
+| `--trim_silence` | Skip silence using a first pass with [silencedetect](https://ffmpeg.org/ffmpeg-filters.html#silencedetect) filter. Skip silence at the start, end, or cut all detected silence. | `--trim_silence` |
+| `-v` / `--video_filter` | [Video filter](https://ffmpeg.org/ffmpeg-filters.html#Video-Filters) arguments. This string is passed directly to ffmpeg's -vf chain. | `-v "spp,minterpolate=fps=24:mi_mode=mci"` |
+| `-x` / `--cut` | Segments to cut (opposite of concatenate) | `-x "2:00-3:00"`
+
 
 ### Music Webms
 By default, webm-for-4chan chooses the lowest audio sample rate it can get away with. This is not desirable for music-oriented webms where sound comes first.
@@ -275,8 +333,6 @@ Type `--help` for a complete list of commands.
 
 ## Tips, Tricks, and References
 - If you're unsure about your `-s`/`--start` and `-e`/`--end` timestamps, try a `--dry_run -k` and inspect temp.opus to see if the audio is the right slice that you want.
-- For long videos (over about 3 minutes), it's usually beneficial to add `-v spp`
-  - https://ffmpeg.org/ffmpeg-filters.html#spp-1
 - Filter graph building for `-c`/`--concat` and `-x`/`--cut` were made possible through this valuable reference:
   - https://github.com/sriramcu/ffmpeg_video_editing
 - Specify `-k` when running `-c`/`--concat` or`-x`/`--cut` to keep the original file containing the spliced segments. This will save time if you are unsatisfied with the final result and need to re-encode.
