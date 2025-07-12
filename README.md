@@ -1,7 +1,7 @@
 # webm-for-4chan
-Webm converter optimized for 4chan.\
+Webm (and mp4) converter optimized for 4chan.\
+Just works for noobs while supporting advanced features for power users.\
 Targets 6MB with sound (/wsg/) by default, but 4MB with sound (/gif/) and 4MB without sound are supported.\
-Makes .webm (vp9/opus) by default, but .mp4 (h264/aac) is also supported.\
 Developed on Linux, probably works on Windows.
 
 Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want to learn more about webms in general.
@@ -47,9 +47,11 @@ Checkout [my webm guide](https://chameleon-ai.github.io/webm-guide/) if you want
 It's a simple wrapper for ffmpeg. A precise file size is determined by first rendering the audio, then calculating a target video bit-rate in kbps using the remaining space not taken up by the audio. Then, using 2-pass encoding, it's up to ffmpeg to hit the target size exactly. It's usually very good at hitting the target size without going over, but it's not perfect.
 
 ## Installation and Dependencies
-As long as you have python, you're good to go. No requirements.txt needed.\
+**As long as you have python, you're good to go.**\
+No virtual environments, no compiling, no installation.\
 This script just uses the python standard library and makes system calls to ffmpeg and ffprobe.\
-Make sure ffmpeg and ffprobe are accessible from your path, that's it.\
+Make sure ffmpeg and ffprobe are accessible from your path, that's it.
+
 If ffmpeg is not in your system path or you want to specify an alternate, edit `ffmpeg_path = None` at the top of the script, e.g. `ffmpeg_path = '/home/your/custom/path'`\
 For optional [yt-dlp](https://github.com/yt-dlp/yt-dlp) support, make sure yt-dlp is in your system path or edit `ytdlp_path = None` at the top of the script.\
 (yt-dlp is not a hard dependency, it is only used if you specify a url to download)
@@ -128,17 +130,17 @@ Use `-o`/`--output` to specify a custom file name.
 | `--no_resize` | Do not resize the output. | `--no_resize` |
 | `--no_mixdown` | Disable automatic audio mixdown. Equivalent to `--mixdown same_as_source` | `--no_mixdown` |
 | `--no_mt` | Disable [row based multithreading](https://trac.ffmpeg.org/wiki/Encode/VP9#rowmt) | `--no_mt` |
-| `-o` / `--output` | Output file name (If not specified, output is named after the input prepended with "`_1_`") | -o out.webm |
+| `-o` / `--output` | Output file name (If not specified, output is named after the input prepended with "`_1_`") | `-o out.webm` |
 | `-r` / `--resolution` | Manual resolution override. Applied as the maximum dimension both horizontal and vertical. If not specified, the resolution is automatically determined based on target bitrate. | `-r 1280` |
-| `--resize_mode` | May be `cubic`, `logarithmic`, or `table`. | `--resize_mode table` |
+| `--resize_mode` | How to calculate target resolution. `table` = use time-based lookup table. May be `cubic`, `logarithmic`, or `table`. Default is `logarithmic`. | `--resize_mode table` |
 | `-s` / `--start` | Absolute start timestamp. 0:00 if not specified. | `--start 3:45` |
 | `--size` / `--limit` | Target file size limit, in MiB. Default is 6 if board is wsg, and 4 otherwise. | `--size 2.5` |
 | `--static_image` | Treat video as a static image and use image+audio combine mode. | `--static_image` |
 | `--stereo` | Do stereo mixdown. Equivalent to `--mixdown stereo` | `--stereo` |
 | `--sub_index` | Subtitle index to burn-in (use `--list_subs` if you don't know the index) | `--sub_index` |
-| `--sub_lang` | Subtitle language to burn-in, must be an exact match with what is listed in the file (use `--list_subs` if you don't know the language) | `--sub_lang` |
+| `--sub_lang` | Subtitle language to burn-in, must be an exact match with what is listed in the file (use `--list_subs` if you don't know the language). Note subtitle language is often mislabeled, so this is less reliable than using the index.  | `--sub_lang` |
 | `--sub_file` | Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs) | `--sub_file subs.ass` |
-| `--trim_silence` | Skip silence using a first pass with [silencedetect](https://ffmpeg.org/ffmpeg-filters.html#silencedetect) filter. Skip silence at the start, end, or cut all detected silence. | `--trim_silence` |
+| `--trim_silence` | Skip silence using a first pass with [silencedetect](https://ffmpeg.org/ffmpeg-filters.html#silencedetect) filter. Skip silence at the start, end, or cut all detected silence. May be `start`, `end`, or `start_and_end` | `--trim_silence all` |
 | `-v` / `--video_filter` | [Video filter](https://ffmpeg.org/ffmpeg-filters.html#Video-Filters) arguments. This string is passed directly to ffmpeg's -vf chain. | `-v "spp"` |
 | `-x` / `--cut` | Segments to cut (opposite of concatenate) | `-x "2:00-3:00"`
 
