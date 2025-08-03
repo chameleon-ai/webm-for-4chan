@@ -1422,12 +1422,12 @@ def image_audio_combine(input_image, input_audio, args):
         size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
         target_kbps = min((int)(size_kb / duration.total_seconds()), max_bitrate) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
         compensated_kbps = target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation) # Subtract the compensation factor if specified
-        if compensated_kbps <= 4: # Not enough margin for video, re-calculate by reducing audio bit-rate
+        if compensated_kbps <= 3: # Not enough margin for video, re-calculate by reducing audio bit-rate
             print('Warning: Audio bitrate is too large. Reducing bitrate:', end='')
             args.audio_rate = max([x for x in audio_bitrate_table if x < audio_kbps])
         else:
             break
-    compensated_kbps -= 4 # Hard-code a reduction in target bit-rate so that we stay under the limit
+    compensated_kbps -= 3 # Hard-code a reduction in target bit-rate so that we stay under the limit
     video_bitrate = '{}k'.format(compensated_kbps)
     
     ffmpeg_args = ["ffmpeg", '-hide_banner']
