@@ -1472,7 +1472,7 @@ def image_audio_combine(input_image, input_audio, args):
     if args.crop is not None:
         if vf_args != '':
             vf_args += ',' # Tack on to other args if string isn't empty
-        vf_args += args.crop
+        vf_args += f"crop='{args.crop}'"
     if args.resolution is None and not args.no_resize: # Force a resolution cap unless otherwise specified
         args.resolution = 512
     if args.resolution is not None:
