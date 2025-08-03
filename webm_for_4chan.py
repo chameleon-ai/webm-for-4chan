@@ -29,7 +29,7 @@ max_bitrate = 2800 # (kbps) Cap bitrate in case the clip is really short. This i
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
 max_duration = [400, 300, 120] # Maximum clip durations, in seconds [wsg, gif, all other boards]
 resolution_table = [480, 576, 640, 736, 854, 960, 1024, 1280, 1440, 1600, 1920, 2048] # Table of discrete resolutions
-audio_bitrate_table = [12, 24, 32, 40 , 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512] # Table of discrete audio bit-rates
+audio_bitrate_table = [12, 24, 32, 40 , 48, 56, 64, 80, 96, 112, 120, 128, 160, 192, 224, 256, 320, 384, 448, 512] # Table of discrete audio bit-rates
 resolution_fallback_map = { # This time-based lookup is used if smart resolution calculation fails for some reason
     15.0: 1920,
     30.0: 1600,
@@ -50,6 +50,7 @@ fps_map = { # Map of clip duration to fps. Clip must be below the duration to fi
 }
 audio_map = { # Map of clip duration to audio bitrate. Very long clips benefit from audio bitrate reduction, but not ideal for music oriented webms. Use --music_mode to bypass.
     15.0: 128,
+    30.0: 120,
     45.0: 112,
     95.0: 96,
     120.0: 80,
@@ -71,6 +72,7 @@ audio_map_music_mode = { # Use high bit rate in music mode. Trying to keep the m
     100.0: 192,
     220.0: 160,
     285.0: 128,
+    300.0: 120,
     330.0: 112,
     400.0: 96
 }
@@ -1420,22 +1422,23 @@ def image_audio_combine(input_image, input_audio, args):
         size_kb = adjusted_size_limit / 1024 * 8 # File budget in kilobits
         target_kbps = min((int)(size_kb / duration.total_seconds()), max_bitrate) # Bit rate in kilobits/sec, limit to max size so that small clips aren't unnecessarily large
         compensated_kbps = target_kbps - calculate_bitrate_compensation(duration, args.bitrate_compensation) # Subtract the compensation factor if specified
-        if compensated_kbps <= 5: # Not enough margin for video, re-calculate by reducing audio bit-rate
+        if compensated_kbps <= 4: # Not enough margin for video, re-calculate by reducing audio bit-rate
             print('Warning: Audio bitrate is too large. Reducing bitrate:', end='')
             args.audio_rate = max([x for x in audio_bitrate_table if x < audio_kbps])
         else:
             break
-    compensated_kbps -= 5 # Hard-code a reduction in target bit-rate so that we stay under the limit
+    compensated_kbps -= 4 # Hard-code a reduction in target bit-rate so that we stay under the limit
     video_bitrate = '{}k'.format(compensated_kbps)
     
     ffmpeg_args = ["ffmpeg", '-hide_banner']
 
     # Image / video input
+    input_fps = 1
     image_subtype = mimetypes.guess_type(input_image)[0].split('/')[-1]
     if image_subtype == 'gif': # Gifs need different arguments than static images
         ffmpeg_args.extend(['-ignore_loop', '0'])
     else:
-        ffmpeg_args.extend(['-framerate', '1', '-loop', '1']) # 1 fps, -loop 1 = loop frames
+        ffmpeg_args.extend(['-framerate', str(input_fps), '-loop', '1']) # 1 fps, -loop 1 = loop frames
     ffmpeg_args.extend(['-i', input_image])
 
     # Audio input
@@ -1451,7 +1454,7 @@ def image_audio_combine(input_image, input_audio, args):
         ffmpeg_args.extend(["-ac", "1"])
 
     # Output
-    keyframe_interval = duration.total_seconds()
+    keyframe_interval = duration.total_seconds() * input_fps
 
     # https://ffmpeg.org/ffmpeg-codecs.html#libvpx
     vp9_args = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
@@ -1667,7 +1670,7 @@ if __name__ == '__main__':
         parser.add_argument('-s', '--start', type=str, default='0.0', help='Start timestamp, i.e. 0:30:5.125')
         parser.add_argument('-e', '--end', type=str, help='End timestamp, i.e. 0:35:0.000')
         parser.add_argument('-d', '--duration', type=str, help='Clip duration (maximum {} seconds in wsg mode, {} for gif, {} seconds otherwise), i.e. 1:15.000'.format(max_duration[0], max_duration[1], max_duration[2]))
-        parser.add_argument('-b', '--bitrate_compensation', default=0, type=int, help='Fixed value to subtract from target bitrate (kbps). Use if your output size is overshooting')
+        parser.add_argument('-b', '--bitrate_compensation', default=0, type=float, help='Fixed value to subtract from target bitrate (kbps). Use if your output size is overshooting')
         parser.add_argument('-n', '--normalize', action='store_true', help='Enable 2-pass audio normalization.')
         parser.add_argument('-r', '--resolution', type=int, help="Manual resolution override. Maximum resolution, i.e. 1280. Applied vertically and horzontally, aspect ratio is preserved.")
         parser.add_argument('-a', '--audio_filter', type=str, help="Audio filter arguments. This string is passed directly to the -af chain.")
