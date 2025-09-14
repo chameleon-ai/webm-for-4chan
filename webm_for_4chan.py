@@ -1042,7 +1042,7 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
     else:
         pass2.extend(["-an"]) # No audio
     pass2.append(output)
-    
+
     # Pass 1
     print('Encoding video (1st pass)')
     print(' '.join(pass1))
@@ -1376,7 +1376,7 @@ def process_video(input_filename, start, duration, args, full_video):
             if result.returncode != 0 or not os.path.isfile(carbon_copy_output):
                 print(' '.join(carbon_copy_cmd))
                 print(result.stderr)
-                raise RuntimeError('Error exporting png. ffmpeg return code: {}'.format(result.returncode))
+                raise RuntimeError('Error rendering carbon copy. ffmpeg return code: {}'.format(result.returncode))
         print(f'Carbon Copy: {carbon_copy_output}')
 
     # The main part where the video is rendered
