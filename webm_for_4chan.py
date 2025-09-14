@@ -14,6 +14,7 @@ import mimetypes
 import os
 import platform
 import re
+import shutil
 import signal
 import subprocess
 import traceback
@@ -956,6 +957,7 @@ def gif_caption(input_filename : str, args):
     ffmpeg_args = ["ffmpeg", '-hide_banner', '-i', input_filename]
     ffmpeg_args.extend(['-vf', caption(args.caption, args.font, input_filename, None)])
     ffmpeg_args.append(output_filename)
+    print(' '.join(ffmpeg_args))
     if not args.dry_run:
         # Use popen so we can pend on completion
         pope = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding='utf-8', errors='ignore')
@@ -996,6 +998,9 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
         if not full_video:
             ffmpeg_args.extend(slice_args)
         ffmpeg_args.extend(['-i', input])
+        
+    # Eliminate embedded subtitles, which can cause timecode issues
+    ffmpeg_args.append('-sn')
 
     if vf_args != '': # Add video filter if there are any arguments
         ffmpeg_args.extend(["-vf", vf_args])
@@ -1037,7 +1042,7 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
     else:
         pass2.extend(["-an"]) # No audio
     pass2.append(output)
-
+    
     # Pass 1
     print('Encoding video (1st pass)')
     print(' '.join(pass1))
@@ -1102,6 +1107,7 @@ def get_mixdown_mode(audio_kbps, audio_track, mixdown : MixdownMode):
 
 def process_video(input_filename, start, duration, args, full_video):
     output = get_output_filename(input_filename, args)
+    original_input_filename = input_filename # For carbon copy in the case that cut or concat overwrites the input passed to final video processing
 
     if args.trim_silence is not None:
         silence_segments = silencedetect(input_filename, start, duration)
@@ -1349,6 +1355,29 @@ def process_video(input_filename, start, duration, args, full_video):
         audio_codec = ["-c:a", "libopus", '-b:a', audio_bitrate]
     elif args.codec == 'libx264':
         audio_codec = ["-c:a", "aac", '-b:a', audio_bitrate]
+
+    # Carbon Copy
+    if args.cc:
+        print('Making Carbon Copy...')
+        carbon_copy_output = get_output_filename(original_input_filename, args, suffix='.mkv')
+        # For efficiency, we can simply copy cut/concat temp files because it's exactly the format we're looking for
+        if args.concat is not None or args.cut is not None:
+            shutil.copyfile(input_filename, carbon_copy_output)
+        else:
+            carbon_copy_output = get_output_filename(input_filename, args, suffix='.mkv')
+            carbon_copy_cmd = [ffmpeg_exe, '-hide_banner']
+            if subs == '': # Burn-in subtitles
+                carbon_copy_cmd.extend(['-ss', str(start), "-t", str(duration), '-i', input_filename])
+            else:
+                carbon_copy_cmd.extend(['-i', input_filename, '-ss', str(start), "-t", str(duration)])
+                carbon_copy_cmd.extend(['-vf', f'subtitles={subs}'])
+            carbon_copy_cmd.extend(['-c:v', 'libx264', '-preset', 'ultrafast', '-qp', '0', '-c:a', 'libopus', '-b:a', '512k', '-sn', carbon_copy_output])
+            result = subprocess.run(carbon_copy_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+            if result.returncode != 0 or not os.path.isfile(carbon_copy_output):
+                print(' '.join(carbon_copy_cmd))
+                print(result.stderr)
+                raise RuntimeError('Error exporting png. ffmpeg return code: {}'.format(result.returncode))
+        print(f'Carbon Copy: {carbon_copy_output}')
 
     # The main part where the video is rendered
     encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.mixdown, args.board, args.bframes, args.dry_run)
@@ -1691,6 +1720,7 @@ if __name__ == '__main__':
         parser.add_argument('--board', '--mode', dest='board', type=BoardMode, default='wsg', choices=list(BoardMode), help='Webm convert mode. wsg=6MB with sound, gif=4MB with sound, other=4MB no sound')
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
         parser.add_argument('--caption', type=str, help='Caption text to add. Caption is rendered on top with a white background in "gif caption" meme format.')
+        parser.add_argument('--cc', action='store_true', help='Create a lossless Carbon Copy as h264+opus mkv.')
         parser.add_argument('--codec', type=str, default='libvpx-vp9', choices=['libvpx-vp9','libx264', 'vp9_vaapi'], help='Video codec to use. Default is libvpx-vp9.')
         parser.add_argument('--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')

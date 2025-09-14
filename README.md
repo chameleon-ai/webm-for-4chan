@@ -106,6 +106,7 @@ Use `-o`/`--output` to specify a custom file name.
 |`--bypass_resolution_table`| Do not snap to the nearest standard resolution and use raw calculated instead. | `--bypass_resolution_table` |
 |`-c` / `--concat` / `--clip` | Segments to concatenate (everything BUT these are cut), separated by "`;`". See [Clipping](#clipping) section of readme. | `-c "5:00-5:15;5:45-5:52.4"` |
 | `--caption` | Caption text to add. See [Gif Caption Mode](#gif-caption-mode) section of readme. | `--caption "hello world"` |
+| `--cc` | Make a lossless, unresized, unfiltered carbon copy as h264+opus mkv (Warning: these files can be very large, up to multiple gigabytes). Useful if you anticipate retrying the encode with various settings or if you just want an unresized original clip. Using `--cc` with `--dry_run` will intentionally still create the mkv (`--dry_run` only skips final 2-pass target encoding). | `--cc` |
 | `--codec` | Video codec to use. The appropriate corresponding audio codec will be automatically selected. May be `libvpx-vp9`, `libx264`, or `vp9_vaapi`. Default is libvpx-vp9. | `--codec libx264` |
 | `--crop` | Crop the video. This string is passed directly to ffmpeg's [crop](https://ffmpeg.org/ffmpeg-filters.html#crop) filter. | `--crop "512:768:iw-512:ih-768"` |
 | `-d` / `--duration` | Clip duration timestamp. Automatically set to the full length of the video if `--start` or `--end` are not specified. | `-d 1:23` |
@@ -337,7 +338,7 @@ Type `--help` for a complete list of commands.
 - If you're unsure about your `-s`/`--start` and `-e`/`--end` timestamps, try a `--dry_run -k` and inspect temp.opus to see if the audio is the right slice that you want.
 - Filter graph building for `-c`/`--concat` and `-x`/`--cut` were made possible through this valuable reference:
   - https://github.com/sriramcu/ffmpeg_video_editing
-- Specify `-k` when running `-c`/`--concat` or`-x`/`--cut` to keep the original file containing the spliced segments. This will save time if you are unsatisfied with the final result and need to re-encode.
+- Specify `--cc` when running `-c`/`--concat` or`-x`/`--cut` to keep the original file containing the spliced segments. This will save time if you are unsatisfied with the final result and need to re-encode.
 - There is a known issue with some varieties of surround sound for libopus. I have attempted to detect and correct for this issue, but some features in the script are incompatible with this workaround. For more information, see:
   - https://trac.ffmpeg.org/ticket/5718
 - More information on the audio normalization technique used by `-n`/`--normalize`:
