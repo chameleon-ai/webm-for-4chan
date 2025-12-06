@@ -138,8 +138,8 @@ Use `-o`/`--output` to specify a custom file name.
 | `--size` / `--limit` | Target file size limit, in MiB. Default is 6 if board is wsg, and 4 otherwise. | `--size 2.5` |
 | `--static_image` | Treat video as a static image and use image+audio combine mode. | `--static_image` |
 | `--stereo` | Do stereo mixdown. Equivalent to `--mixdown stereo` | `--stereo` |
-| `--sub_index` | Subtitle index to burn-in (use `--list_subs` if you don't know the index) | `--sub_index` |
-| `--sub_lang` | Subtitle language to burn-in, must be an exact match with what is listed in the file (use `--list_subs` if you don't know the language). Note subtitle language is often mislabeled, so this is less reliable than using the index.  | `--sub_lang` |
+| `--sub_index` | Subtitle index to burn-in (use `--list_subs` if you don't know the index) | `--sub_index 0` |
+| `--sub_lang` | Subtitle language to burn-in, must be an exact match with what is listed in the file (use `--list_subs` if you don't know the language). Note subtitle language is often mislabeled, so this is less reliable than using the index.  | `--sub_lang en` |
 | `--sub_file` | Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs) | `--sub_file subs.ass` |
 | `--trim_silence` | Skip silence using a first pass with [silencedetect](https://ffmpeg.org/ffmpeg-filters.html#silencedetect) filter. Skip silence at the start, end, or cut all detected silence. May be `start`, `end`, or `start_and_end` | `--trim_silence all` |
 | `-v` / `--video_filter` | [Video filter](https://ffmpeg.org/ffmpeg-filters.html#Video-Filters) arguments. This string is passed directly to ffmpeg's -vf chain. | `-v "spp"` |

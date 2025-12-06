@@ -28,7 +28,7 @@ ytdlp_path = None # Edit this if you want to specify a custom path to yt-dlp
 ytdlp_exe = os.path.join(ytdlp_path, 'yt-dlp') if ytdlp_path else 'yt-dlp'
 max_bitrate = 2800 # (kbps) Cap bitrate in case the clip is really short. This is already an absurdly high rate.
 max_size = [6144 * 1024, 4096 * 1024] # 4chan size limits, in bytes [wsg, all other boards]
-max_duration = [400, 300, 120] # Maximum clip durations, in seconds [wsg, gif, all other boards]
+max_duration = [399.92, 300, 120] # Maximum clip durations, in seconds [wsg, gif, all other boards]
 resolution_table = [480, 576, 640, 736, 854, 960, 1024, 1280, 1440, 1600, 1920, 2048] # Table of discrete resolutions
 audio_bitrate_table = [12, 24, 32, 40 , 48, 56, 64, 80, 96, 112, 120, 128, 160, 192, 224, 256, 320, 384, 448, 512] # Table of discrete audio bit-rates
 resolution_fallback_map = { # This time-based lookup is used if smart resolution calculation fails for some reason
@@ -644,7 +644,7 @@ def parse_segments(start, segments : str, do_print = True):
         relative_start = absolute_start - start
         relative_end = absolute_end - start
         if do_print:
-            print('Identified segment: {}-{}'.format(absolute_start, absolute_end))
+            print(f'Identified segment: {absolute_start}-{absolute_end} (duration {absolute_end - absolute_start})')
         parsed_segments.append((relative_start, relative_end))
     return parsed_segments
 
