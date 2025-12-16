@@ -222,6 +222,98 @@ def is_segment(arg : str):
                 return False
     return True # Only true if all arguments pass as individual timestamps
 
+# Yeah, I vibe coded this one, what are you gonna do about it?
+def validate_timestamp_ranges(s: str) -> None:
+    """
+    Validate a semicolon-separated list of timestamp ranges "start-end".
+    Raises ValueError with a helpful message pointing to the first malformed token or timestamp.
+    Valid timestamp forms (seconds required; optional minutes, hours, fraction):
+      SS
+      SS.sss
+      M:SS
+      M:SS.sss
+      H:MM:SS
+      H:MM:SS.sss
+
+    Examples valid input:
+      "12-14.5;1:23-1:24;2:25.6-2:25.8;3:00:00.2-4:00:00.5"
+
+    On success (valid input) the function returns None.
+    """
+    if not isinstance(s, str):
+        raise ValueError("Input must be a string.")
+    if s == "":
+        raise ValueError("Input is empty.")
+
+    # regex for a timestamp: optional hours and minutes separated by colons, required seconds with optional fraction
+    # We won't rely solely on groups to deduce positions; instead validate parts after split.
+    ts_pattern = re.compile(r'^\d+(?::\d{1,2}){0,2}(?:\.\d+)?$')  # digits with 0-2 :xx parts, optional .fraction
+
+    def parse_ts_to_seconds(ts: str, token_index: int, part_name: str) -> float:
+        if not ts:
+            raise ValueError(f"Empty {part_name} in token {token_index + 1}.")
+        if not ts_pattern.match(ts):
+            raise ValueError(f"Malformed {part_name} '{ts}' in token {token_index + 1}.")
+        parts = ts.split(':')
+        # interpret parts:
+        # len==1 -> SS(.fff)
+        # len==2 -> M:SS(.fff)
+        # len==3 -> H:MM:SS(.fff)
+        try:
+            if len(parts) == 1:
+                h = 0
+                m = 0
+                sec = float(parts[0])
+            elif len(parts) == 2:
+                h = 0
+                m = int(parts[0])
+                sec = float(parts[1])
+            elif len(parts) == 3:
+                h = int(parts[0])
+                m = int(parts[1])
+                sec = float(parts[2])
+            else:
+                raise ValueError  # won't happen thanks to regex, kept for clarity
+        except ValueError:
+            raise ValueError(f"Non-numeric component in {part_name} '{ts}' in token {token_index + 1}.")
+
+        # Validate ranges: minutes 0-59, seconds 0 <= s < 60 (fractions allowed)
+        if m < 0 or m > 59:
+            raise ValueError(f"Minutes out of range in {part_name} '{ts}' in token {token_index + 1} (must be 0-59).")
+        if sec < 0 or sec >= 60:
+            raise ValueError(f"Seconds out of range in {part_name} '{ts}' in token {token_index + 1} (must be 0 <= seconds < 60).")
+        if h < 0:
+            raise ValueError(f"Hours negative in {part_name} '{ts}' in token {token_index + 1}.")
+
+        return h * 3600 + m * 60 + sec
+
+    tokens = s.split(';')
+    for i, token in enumerate(tokens):
+        if token == "":
+            raise ValueError(f"Empty token at position {i + 1}.")
+        # split on dash; must be exactly one dash separating start and end
+        if '-' not in token:
+            raise ValueError(f"Missing '-' range separator in token {i + 1} ('{token}').")
+        parts = token.split('-')
+        if len(parts) != 2:
+            raise ValueError(f"Token {i + 1} has {len(parts)-1} '-' separators; expected exactly one: '{token}'.")
+        start_raw, end_raw = parts[0].strip(), parts[1].strip()
+        if start_raw == "":
+            raise ValueError(f"Empty start timestamp in token {i + 1} ('{token}').")
+        if end_raw == "":
+            raise ValueError(f"Empty end timestamp in token {i + 1} ('{token}').")
+
+        start_sec = parse_ts_to_seconds(start_raw, i, "start timestamp")
+        end_sec = parse_ts_to_seconds(end_raw, i, "end timestamp")
+
+        if start_sec > end_sec:
+            raise ValueError(
+                f"Start time greater than end time in token {i + 1} ('{token}'): "
+                f"{start_raw} ({start_sec}s) > {end_raw} ({end_sec}s)."
+            )
+
+    # If we get here, everything is valid; function returns None.
+
 # Rudamentary timestamp parsing, the format is H:M:S.ms and hours/minutes/milliseconds can be omitted
 def parsetime(timestamp: str) -> datetime.timedelta:
     # Split the timestamp by the colon to separate hours, minutes, and seconds
@@ -634,6 +726,7 @@ def list_audio(input_filename):
 
 # Parse cut/concat segment timestamps
 def parse_segments(start, segments : str, do_print = True):
+    validate_timestamp_ranges(segments)
     parsed_segments = []
     for segment in segments.split(';'):
         segment_start, segment_end = segment.split('-')
@@ -1559,15 +1652,15 @@ def image_audio_combine(input_image, input_audio, args):
             print('WARNING: Output size exceeded target maximum {}. You should rerun with --bitrate_compensation to reduce output size.'.format(int(size_limit/1024)))
     return output
 
-def extract_png(input_filename : str):
-    output_filename = get_temp_filename('png')
+def extract_jpg(input_filename : str):
+    output_filename = get_temp_filename('jpg')
     # -frames:v 1 -update 1
     ffmpeg_cmd = [ffmpeg_exe, '-hide_banner', '-i', input_filename, '-frames:v', '1', '-update', '1', output_filename ]
     result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
     if result.returncode != 0 or not os.path.isfile(output_filename):
         print(' '.join(ffmpeg_cmd))
         print(result.stderr)
-        raise RuntimeError('Error exporting png. ffmpeg return code: {}'.format(result.returncode))
+        raise RuntimeError('Error exporting jpg. ffmpeg return code: {}'.format(result.returncode))
     files_to_clean.append(output_filename)
     return output_filename  
 
@@ -1592,7 +1685,7 @@ def extract_audio(input_filename : str):
     if result.returncode != 0 or not os.path.isfile(output_filename):
         print(' '.join(ffmpeg_cmd))
         print(result.stderr)
-        raise RuntimeError('Error exporting png. ffmpeg return code: {}'.format(result.returncode))
+        raise RuntimeError('Error extracting audio. ffmpeg return code: {}'.format(result.returncode))
     files_to_clean.append(output_filename)
     return output_filename
 
@@ -1862,7 +1955,7 @@ if __name__ == '__main__':
                     exit(0)
             if args.static_image:
                 print('Extracting static image from video...')
-                image_input = extract_png(input_filename)
+                image_input = extract_jpg(input_filename)
                 print('Extracting audio...')
                 audio_input = extract_audio(input_filename)
                 print("Using image + audio combine mode.")
