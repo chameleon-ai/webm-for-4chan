@@ -1047,7 +1047,7 @@ def get_output_filename(input_filename, args, suffix = None):
 
 def gif_caption(input_filename : str, args):
     output_filename = get_output_filename(input_filename, args, '.gif')
-    ffmpeg_args = ["ffmpeg", '-hide_banner', '-i', input_filename]
+    ffmpeg_args = [ffmpeg_exe, '-hide_banner', '-i', input_filename]
     ffmpeg_args.extend(['-vf', caption(args.caption, args.font, input_filename, None)])
     ffmpeg_args.append(output_filename)
     print(' '.join(ffmpeg_args))
@@ -1068,7 +1068,7 @@ def gif_caption(input_filename : str, args):
 
 # The part where the webm is encoded
 def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mixdown : MixdownMode, mode : BoardMode, bframes : int, dry_run : bool):
-    ffmpeg_args = ["ffmpeg", '-hide_banner']
+    ffmpeg_args = [ffmpeg_exe, '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments
     for filter in video_filters:
@@ -1552,7 +1552,7 @@ def image_audio_combine(input_image, input_audio, args):
     compensated_kbps -= 3 # Hard-code a reduction in target bit-rate so that we stay under the limit
     video_bitrate = '{}k'.format(compensated_kbps)
     
-    ffmpeg_args = ["ffmpeg", '-hide_banner']
+    ffmpeg_args = [ffmpeg_exe, '-hide_banner']
 
     # Image / video input
     input_fps = 1
@@ -1720,14 +1720,14 @@ def audio_replace(video_input, audio_input, args):
     # Create a temp file that has no sound
     video_out_no_sound = get_temp_filename(os.path.splitext(video_input)[-1].replace('.',''))
     files_to_clean.append(video_out_no_sound)
-    ffmpeg_cmd1 = ["ffmpeg", '-hide_banner', '-i', video_input, '-c:v', 'copy', '-an', video_out_no_sound]
+    ffmpeg_cmd1 = [ffmpeg_exe, '-hide_banner', '-i', video_input, '-c:v', 'copy', '-an', video_out_no_sound]
     result = subprocess.run(ffmpeg_cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0 or not os.path.isfile(video_out_no_sound):
         print(' '.join(ffmpeg_cmd1))
         print(result.stderr)
         raise RuntimeError('Error rendering temp video. ffmpeg return code: {}'.format(result.returncode))
     category, mimetype = mimetypes.guess_type(video_input)[0].split('/')
-    ffmpeg_args = ["ffmpeg", '-hide_banner', '-i', video_out_no_sound, '-i', audio_input, '-c:v', 'copy', '-c:a']
+    ffmpeg_args = [ffmpeg_exe, '-hide_banner', '-i', video_out_no_sound, '-i', audio_input, '-c:v', 'copy', '-c:a']
     if mimetype == 'mp4':
         print('Using mp4/aac')
         args.codec = 'libx264'
