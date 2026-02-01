@@ -1523,10 +1523,8 @@ def image_audio_combine(input_image, input_audio, args):
     
     # Note that not all audio formats have the bitrate encoded in the metadata
     # For the purposes of the calculations needed here this is an acceptable estimate
-    filesize = os.path.getsize(input_audio)
-    kbits = filesize * 8 / 1000
-    duration = get_video_duration(input_audio, 0.0)
-    kbps = int(kbits / duration.total_seconds())
+    filesize_kbits = os.path.getsize(input_audio) * 8 / 1000
+    kbps = int(filesize_kbits / duration.total_seconds())
     source_audio_rate = audio_bitrate_table[min(bisect.bisect_left(audio_bitrate_table, kbps), len(audio_bitrate_table) - 1)]
     #print(f'Estimated audio bitrate: {source_audio_rate} kbps')
 
