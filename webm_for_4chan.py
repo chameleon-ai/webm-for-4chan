@@ -6,6 +6,7 @@
 # Specifying seconds larger than 59 causes a cryptic parse error
 
 import argparse
+import bisect
 import datetime
 from enum import Enum
 import json
@@ -1518,12 +1519,23 @@ def image_audio_combine(input_image, input_audio, args):
     
     audio_subtype = mimetypes.guess_type(input_audio)[0].split('/')[-1]
     duration = get_video_duration(input_audio, 0.0)
-    print('Audio duration: {}'.format(duration))
+    print(f'Audio duration: {duration}')
+    
+    # Note that not all audio formats have the bitrate encoded in the metadata
+    # For the purposes of the calculations needed here this is an acceptable estimate
+    filesize = os.path.getsize(input_audio)
+    kbits = filesize * 8 / 1000
+    duration = get_video_duration(input_audio, 0.0)
+    kbps = int(kbits / duration.total_seconds())
+    source_audio_rate = audio_bitrate_table[min(bisect.bisect_left(audio_bitrate_table, kbps), len(audio_bitrate_table) - 1)]
+    #print(f'Estimated audio bitrate: {source_audio_rate} kbps')
 
     size_limit = get_size_limit(args)
     print('Calculating audio bitrate: ', end='') # Do a lot of prints in case there is an error on one of the steps or it hangs
     while True:
-        max_audio_rate = size_limit / duration.total_seconds() / 1024 * 8
+        # The size_limit is based on the target file size limitation.
+        # The source_audio_rate is based on the input audio, which functions as a limit so that we don't waste space re-encoding audio above the source bitrate.
+        max_audio_rate = min(size_limit / duration.total_seconds() / 1000 * 8, source_audio_rate)
         audio_kbps = args.audio_rate if args.audio_rate is not None else max([x for x in audio_bitrate_table if x <= max_audio_rate])
         audio_bitrate = '{}k'.format(audio_kbps)
         print(audio_bitrate)
