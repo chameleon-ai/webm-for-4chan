@@ -215,10 +215,11 @@ def is_timestamp(arg : str):
 
 # Determines if the argument is a segment (i.e. a collection of timestamps used by --cut or --concat)
 def is_segment(arg : str):
+    """Determines if the argument is a segment (i.e. a collection of timestamps used by --cut or --concat)"""
     for tok in arg.split(';'): # Segments can be split by semicolon
-        if '-' not in tok:
-            return False # Segments need to be separated by a dash
-        for seg in tok.split('-'):
+        if '-' not in tok and '+' not in tok:
+            return False # Segments need to be separated by a dash or plus
+        for seg in re.split('-|\\+', tok):
             if not is_timestamp(seg):
                 return False
     return True # Only true if all arguments pass as individual timestamps
@@ -293,9 +294,9 @@ def validate_timestamp_ranges(s: str) -> None:
         if token == "":
             raise ValueError(f"Empty token at position {i + 1}.")
         # split on dash; must be exactly one dash separating start and end
-        if '-' not in token:
-            raise ValueError(f"Missing '-' range separator in token {i + 1} ('{token}').")
-        parts = token.split('-')
+        if '-' not in token and '+' not in token:
+            raise ValueError(f"Missing '-/+' range separator in token {i + 1} ('{token}').")
+        parts = re.split('-|\\+', token)
         if len(parts) != 2:
             raise ValueError(f"Token {i + 1} has {len(parts)-1} '-' separators; expected exactly one: '{token}'.")
         start_raw, end_raw = parts[0].strip(), parts[1].strip()
@@ -307,7 +308,7 @@ def validate_timestamp_ranges(s: str) -> None:
         start_sec = parse_ts_to_seconds(start_raw, i, "start timestamp")
         end_sec = parse_ts_to_seconds(end_raw, i, "end timestamp")
 
-        if start_sec > end_sec:
+        if start_sec > end_sec and '-' in token: # Ranges can't go backward in time
             raise ValueError(
                 f"Start time greater than end time in token {i + 1} ('{token}'): "
                 f"{start_raw} ({start_sec}s) > {end_raw} ({end_sec}s)."
@@ -727,12 +728,19 @@ def list_audio(input_filename):
 
 # Parse cut/concat segment timestamps
 def parse_segments(start, segments : str, do_print = True):
+    """Parse cut/concat segment timestamps"""
     validate_timestamp_ranges(segments)
     parsed_segments = []
     for segment in segments.split(';'):
-        segment_start, segment_end = segment.split('-')
-        absolute_start = parsetime(segment_start)
-        absolute_end = parsetime(segment_end)
+        if '-' in segment: # The minus represents a pair of absolute timestamps
+            segment_start, segment_end = segment.split('-')
+            absolute_start = parsetime(segment_start)
+            absolute_end = parsetime(segment_end)
+        elif '+' in segment: # The plus represents an absolute timestamp followed by a duration
+            segment_start, segment_duration = segment.split('+')
+            absolute_start = parsetime(segment_start)
+            end_duration = parsetime(segment_duration)
+            absolute_end = absolute_start + end_duration
         if absolute_start < start or absolute_end < start:
             raise RuntimeError('Segment {}-{} starts before the start time of {}'.format(absolute_start, absolute_end, start))
         relative_start = absolute_start - start
