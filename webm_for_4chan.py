@@ -1413,6 +1413,8 @@ def process_video(input_filename, start, duration, args, full_video):
     if resolution is not None:
         # Constrain to a maximum of the target resolution, horizontal or vertical, while preserving the original aspect ratio
         video_filters.append("scale='min({},iw)':'min({},ih):force_original_aspect_ratio=decrease'".format(resolution,resolution))
+    if args.hdr:
+        video_filters.append("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p")
     if fps is not None:
         video_filters.append('fps={}'.format(fps))
     if args.video_filter is not None: # Arbitrary user-supplied filters
@@ -1843,6 +1845,7 @@ if __name__ == '__main__':
         parser.add_argument('--first_second_every_minute', action='store_true', help='Take 1 second from every minute of the input.')
         parser.add_argument('--font', type=str, help="Font to use for captions.")
         parser.add_argument('--fps', type=float, help='Manual fps override.')
+        parser.add_argument('--hdr', action='store_true', help="Process HDR input to the standard colorspace.")
         parser.add_argument('--list_audio', action='store_true', help="List audio tracks and quit. Use if you don't know which --audio_index or --audio_lang to specify.")
         parser.add_argument('--list_subs', action='store_true', help="List embedded subtitles and quit. Use if you don't know which --sub_index or --sub_lang to specify.")
         parser.add_argument('--mono', action='store_true', help="Do mono mixdown. Equivalent to --mixdown mono")

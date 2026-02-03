@@ -117,6 +117,7 @@ Use `-o`/`--output` to specify a custom file name.
 | `-e` / `--end` | Absolute end timestamp. Used instead of `-d` / `--duration`. Do not specify both `-e` and `-d`. | `-e 2:34` |
 | `--font` | Font to use when specifying `--caption`. | `--font Impact` |
 | `--fps` | Manual fps override. If not specified, fps will be automatically determined based on video length. | `--fps 24` |
+| `--hdr` | Convert HDR to the standard colorspace using [zscale transfer](https://ffmpeg.org/ffmpeg-filters.html#zscale-1). | `--hdr` |
 | `-i` / `--input` | Input file to process. Use this if deducing from a context specific argument fails. | `-i input.mp4` |
 | `-k` / `--keep_temp_files` | Keep temporary files like `temp.opus` and `temp.mkv` | `-k` |
 | `--list_audio` | List audio tracks and quit. Use if you don't know which `--audio_index` or `--audio_lang` to specify. | `--list_audio` |
@@ -141,7 +142,7 @@ Use `-o`/`--output` to specify a custom file name.
 | `--sub_index` | Subtitle index to burn-in (use `--list_subs` if you don't know the index) | `--sub_index 0` |
 | `--sub_lang` | Subtitle language to burn-in, must be an exact match with what is listed in the file (use `--list_subs` if you don't know the language). Note subtitle language is often mislabeled, so this is less reliable than using the index.  | `--sub_lang en` |
 | `--sub_file` | Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs) | `--sub_file subs.ass` |
-| `--trim_silence` | Skip silence using a first pass with [silencedetect](https://ffmpeg.org/ffmpeg-filters.html#silencedetect) filter. Skip silence at the start, end, or cut all detected silence. May be `start`, `end`, or `start_and_end` | `--trim_silence all` |
+| `--trim_silence` | Skip silence using a first pass with [silencedetect](https://ffmpeg.org/ffmpeg-filters.html#silencedetect) filter. Skip silence at the start, end, or cut all detected silence. May be `start`, `end`, `start_and_end`, or `all` | `--trim_silence all` |
 | `-v` / `--video_filter` | [Video filter](https://ffmpeg.org/ffmpeg-filters.html#Video-Filters) arguments. This string is passed directly to ffmpeg's -vf chain. | `-v "spp"` |
 | `-x` / `--cut` | Segments to cut (opposite of concatenate) | `-x "2:00-3:00"`
 
