@@ -129,6 +129,7 @@ Use `-o`/`--output` to specify a custom file name.
 | `-n` / `--normalize` | Enable 2-pass [audio normalization](https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg) | `-n` |
 | `--no_audio` | Encode without audio. | `--no_audio` |
 | `--no_duration_check` | Disable max duration check. | `--no_duration_check` |
+| `--no_dynaudnorm` | Disable [dynamic audio normalization](https://ffmpeg.org/ffmpeg-filters.html#dynaudnorm) when mixing down to mono. | `--no_dynaudnorm` |
 | `--no_resize` | Do not resize the output. | `--no_resize` |
 | `--no_mixdown` | Disable automatic audio mixdown. Equivalent to `--mixdown same_as_source` | `--no_mixdown` |
 | `--no_mt` | Disable [row based multithreading](https://trac.ffmpeg.org/wiki/Encode/VP9#rowmt) | `--no_mt` |

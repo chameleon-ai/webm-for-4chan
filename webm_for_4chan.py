@@ -565,11 +565,12 @@ def get_audio_layout(input_filename : str, track : int):
 
 # Simply renders the audio to file and gets its size.
 # This is the most precise way of knowing the final audio size and rendering this takes a fraction of the time it takes to render the video.
-# Returns a tuple containing the audio bit rate, normalization parameters if applicable, the surround workaround filter if applicable, and a special flag if no audio streams were found
-def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode : BoardMode, acodec : str, mixdown : MixdownMode, normalize : bool):
+# Returns a tuple containing the audio bit rate, audio filters if applicable, the surround workaround filter if applicable, and a special flag if no audio streams were found
+def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, mode : BoardMode, acodec : str, mixdown : MixdownMode, normalize : bool, no_dynaudnorm : bool):
     if str(mode) == 'wsg' or str(mode) == 'gif':
         surround_workaround = False # For working around a known bug in libopus: https://trac.ffmpeg.org/ticket/5718
         surround_workaround_args = None
+        additional_filter = None
         output_ext = 'opus' if acodec == 'libopus' else 'aac'
         output = get_temp_filename(output_ext)
         files_to_clean.append(output)
@@ -583,6 +584,10 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
             ffmpeg_cmd.extend(['-ac', '2'])
         elif mixdown == MixdownMode.mono:
             ffmpeg_cmd.extend(['-ac', '1'])
+            # When doing mono mixdown, multiple channels can sum together and exceed max amplitude. This needs to be mitigated.
+            if not normalize and not no_dynaudnorm: # The normalization step already addresses this more throughoughly so skip it if normalize is applied
+                additional_filter = 'dynaudnorm=m=1,aformat=channel_layouts=mono'
+                ffmpeg_cmd.extend(['-af', additional_filter])
         ffmpeg_cmd1 = ffmpeg_cmd.copy()
         ffmpeg_cmd1.append(output)
         result = subprocess.run(ffmpeg_cmd1, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -665,7 +670,8 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 ffmpeg_cmd.append(output2)
                 result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 if result.returncode == 0 and os.path.isfile(output2):
-                    return [os.path.getsize(output2), params, surround_workaround_args, False]
+                    audio_filter = "loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}".format(params['input_i'], params['input_lra'], params['input_tp'], params['input_thresh'])
+                    return [os.path.getsize(output2), audio_filter, surround_workaround_args, False]
                 else:
                     print('Warning: Could not render normalized audio. Skipping normalization.')
                     print('Debug info:')
@@ -679,8 +685,8 @@ def calculate_audio_size(input_filename, start, duration, audio_bitrate, track, 
                 print('ffmpeg return code: {}'.format(result.returncode))
                 print('stdout: {}'.format(result.stdout))
                 print('stderr: {}'.format(result.stderr))
-                return [os.path.getsize(output), None, surround_workaround_args, False]
-        return [os.path.getsize(output), None, surround_workaround_args, False]
+                return [os.path.getsize(output), additional_filter, surround_workaround_args, False]
+        return [os.path.getsize(output), additional_filter, surround_workaround_args, False]
     else: # No audio
         return [0, None, None, True]
 
@@ -1132,6 +1138,7 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
             pass2.extend(['-ac', '2'])
         elif mixdown == MixdownMode.mono:
             pass2.extend(['-ac', '1'])
+        pass2.extend(audio_codec)
         af_args = ''
         for filter in audio_filters: # Apply miscellaneous filters
             if af_args != '':
@@ -1140,10 +1147,10 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
         if af_args != '':
             pass2.append('-af')
             pass2.append(af_args)
-        pass2.extend(audio_codec)
     else:
         pass2.extend(["-an"]) # No audio
-    pass2.append(output)
+        
+    pass2.append(output) # Output filename
 
     # Pass 1
     print('Encoding video (1st pass)')
@@ -1315,7 +1322,7 @@ def process_video(input_filename, start, duration, args, full_video):
     no_audio = False
     audio_size = 0
     surround_workaround = None
-    np = None
+    af = None
     audio_bitrate = '96k'
     if args.no_audio or str(args.board) == 'other':
         no_audio = True
@@ -1328,7 +1335,7 @@ def process_video(input_filename, start, duration, args, full_video):
         print('Calculating audio size')
         # Calculate the audio file size and the volume normalization parameters if applicable. Always skip normalization in music mode.
         acodec = 'libopus' if (args.codec == 'libvpx-vp9' or args.codec == 'vp9_vaapi') else 'aac'
-        audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.board, acodec, args.mixdown, args.normalize)
+        audio_size, af, surround_workaround, no_audio = calculate_audio_size(input_filename, start, duration, audio_bitrate, audio_track, args.board, acodec, args.mixdown, args.normalize, args.no_dynaudnorm)
         print('Audio size: {}kB'.format(int(audio_size/1024)))
     size_limit = get_size_limit(args)
     adjusted_size_limit = size_limit - audio_size # File budget subtracting audio
@@ -1426,10 +1433,15 @@ def process_video(input_filename, start, duration, args, full_video):
     audio_filters = []
     if surround_workaround is not None:
         audio_filters.append(surround_workaround) # Tack on the surround workaround filter if applicable
-    if np is not None: # Add audio normalization parameters if they exist
+    if af is not None: # Add audio normalization parameters or other audio filters if they exist
         # https://wiki.tnonline.net/w/Blog/Audio_normalization_with_FFmpeg
         # https://superuser.com/questions/1312811/ffmpeg-loudnorm-2pass-in-single-line
-        audio_filters.append("loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}".format(np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh']))
+        audio_filters.append(af)
+        # Note that the dynaudnorm filter has different behavior when omitting -ss arguments.
+        # In order to produce sound of the best quality, need to omit the argument optimization and stick with -ss/-t
+        # This should be fine since the duration argument is supposed to be to the end of the video anyway.
+        if args.mixdown == MixdownMode.mono:
+            full_video = False
     if args.audio_filter is not None:
         audio_filters.append(args.audio_filter)
     
@@ -1556,7 +1568,7 @@ def image_audio_combine(input_image, input_audio, args):
             audio_copy = True
             audio_size = os.path.getsize(input_audio)
         else:
-            audio_size, np, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, 'libopus', args.mixdown, args.normalize)
+            audio_size, af, surround_workaround, no_audio = calculate_audio_size(input_audio, 0.0, duration, audio_bitrate, None, args.board, 'libopus', args.mixdown, args.normalize, args.no_dynaudnorm)
             if no_audio:
                 raise RuntimeError('Unable to complete image + audio combine mode. No audio stream found.')
         print('Audio size: {}kB'.format(int(audio_size/1024)))
@@ -1633,8 +1645,8 @@ def image_audio_combine(input_image, input_audio, args):
     extra_af = []
     if surround_workaround is not None:
         extra_af.append(surround_workaround) # Tack on the surround workaround filter if applicable
-    if np is not None: # Add audio normalization parameters if they exist
-        extra_af.append("loudnorm=linear=true:measured_I={}:measured_LRA={}:measured_tp={}:measured_thresh={}".format(np['input_i'], np['input_lra'], np['input_tp'], np['input_thresh']))
+    if af is not None: # Add audio normalization parameters if they exist
+        extra_af.append(af)
     if args.audio_filter is not None:
         extra_af.append(args.audio_filter)
     af_args = ''
@@ -1854,6 +1866,7 @@ if __name__ == '__main__':
         parser.add_argument('--mixdown', type=MixdownMode, default='auto', choices=list(MixdownMode), help='Sound mixdown mode. Default = auto')
         parser.add_argument('--no_audio', action='store_true', help='Drop audio if it exists')
         parser.add_argument('--no_duration_check', action='store_true', help='Disable max duration check')
+        parser.add_argument('--no_dynaudnorm', action='store_true', help='Disable dynamic audio normalization when downmixing.')
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
         parser.add_argument('--no_mixdown', action='store_true', help='Disable automatic audio mixdown. Equivalent to --mixdown same_as_source.')
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
