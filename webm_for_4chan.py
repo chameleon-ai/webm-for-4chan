@@ -1082,7 +1082,7 @@ def gif_caption(input_filename : str, args):
     return output_filename  
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mixdown : MixdownMode, mode : BoardMode, bframes : int, dry_run : bool):
+def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mixdown : MixdownMode, mode : BoardMode, bframes : int, group_of_pictures: float, dry_run : bool):
     ffmpeg_args = [ffmpeg_exe, '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments
@@ -1113,6 +1113,9 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
     if vf_args != '': # Add video filter if there are any arguments
         ffmpeg_args.extend(["-vf", vf_args])
     ffmpeg_args.extend(video_codec)
+    
+    if group_of_pictures is not None:
+        ffmpeg_args.extend(["-g", str(group_of_pictures)])
 
     if bframes != 0: # Add B-frames argument (default is 0 so it can be skipped if 0)
         ffmpeg_args.extend(["-bf", str(bframes)])
@@ -1496,7 +1499,7 @@ def process_video(input_filename, start, duration, args, full_video):
         print(f'Carbon Copy: {carbon_copy_output}')
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.mixdown, args.board, args.bframes, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.mixdown, args.board, args.bframes, args.group_of_pictures, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -1608,7 +1611,7 @@ def image_audio_combine(input_image, input_audio, args):
         ffmpeg_args.extend(["-ac", "1"])
 
     # Output
-    keyframe_interval = duration.total_seconds() * input_fps
+    keyframe_interval = args.group_of_pictures if args.group_of_pictures is not None else duration.total_seconds() * input_fps
 
     # https://ffmpeg.org/ffmpeg-codecs.html#libvpx
     vp9_args = ["-c:v", "libvpx-vp9", "-deadline", 'good' if args.fast else args.deadline]
@@ -1834,6 +1837,7 @@ if __name__ == '__main__':
         parser.add_argument('-c', '--concat', '--clip', dest='concat', type=str, help='Segments to concatenate (everything BUT these are cut), separated by ";", i.e. "5:00-5:15;5:45-5:52.4"')
         parser.add_argument('-x', '--cut', type=str, help='Segments to cut (opposite of concatenate), separated by ";", i.e. "5:00-5:15;5:45-5:52.4"')
         parser.add_argument('-k', '--keep_temp_files', action='store_true', help="Keep temporary files generated during size calculation etc.")
+        parser.add_argument('-g', '--group_of_pictures', type=float, help="Set ffmpeg's group-of-pictures interval (-g) directly.")
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--audio_rate', type=int, choices=audio_bitrate_table, help='Manual audio bit-rate override (kbps)')

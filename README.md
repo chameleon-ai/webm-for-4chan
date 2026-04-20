@@ -117,6 +117,7 @@ Use `-o`/`--output` to specify a custom file name.
 | `-e` / `--end` | Absolute end timestamp. Used instead of `-d` / `--duration`. Do not specify both `-e` and `-d`. | `-e 2:34` |
 | `--font` | Font to use when specifying `--caption`. | `--font Impact` |
 | `--fps` | Manual fps override. If not specified, fps will be automatically determined based on video length. | `--fps 24` |
+| `-g` / `--group_of_pictures` | Manually set ffmpeg's group-of-pictures interval (a.k.a [keyframe interval](https://www.ioriver.io/terms/keyframe-interval)), in frames. This is directly passed as the `-g` argument to ffmpeg. Not recommended to mess with this unless you know what you're doing. | `-g 60`
 | `--hdr` | Convert HDR to the standard colorspace using [zscale transfer](https://ffmpeg.org/ffmpeg-filters.html#zscale-1). | `--hdr` |
 | `-i` / `--input` | Input file to process. Use this if deducing from a context specific argument fails. | `-i input.mp4` |
 | `-k` / `--keep_temp_files` | Keep temporary files like `temp.opus` and `temp.mkv` | `-k` |
