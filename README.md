@@ -117,7 +117,7 @@ Use `-o`/`--output` to specify a custom file name.
 | `-e` / `--end` | Absolute end timestamp. Used instead of `-d` / `--duration`. Do not specify both `-e` and `-d`. | `-e 2:34` |
 | `--font` | Font to use when specifying `--caption`. | `--font Impact` |
 | `--fps` | Manual fps override. If not specified, fps will be automatically determined based on video length. | `--fps 24` |
-| `-g` / `--group_of_pictures` | Manually set ffmpeg's group-of-pictures interval (a.k.a [keyframe interval](https://www.ioriver.io/terms/keyframe-interval)), in frames. This is directly passed as the `-g` argument to ffmpeg. Not recommended to mess with this unless you know what you're doing. | `-g 60`
+| `-g` / `--group_of_pictures` | Manually set ffmpeg's group-of-pictures interval (a.k.a [keyframe interval](https://www.ioriver.io/terms/keyframe-interval)), in frames. This is directly passed as the `-g` argument to ffmpeg. Not recommended to mess with this unless you know what you're doing. | `-g 60` |
 | `--hdr` | Convert HDR to the standard colorspace using [zscale transfer](https://ffmpeg.org/ffmpeg-filters.html#zscale-1). | `--hdr` |
 | `-i` / `--input` | Input file to process. Use this if deducing from a context specific argument fails. | `-i input.mp4` |
 | `-k` / `--keep_temp_files` | Keep temporary files like `temp.opus` and `temp.mkv` | `-k` |
@@ -135,6 +135,7 @@ Use `-o`/`--output` to specify a custom file name.
 | `--no_mixdown` | Disable automatic audio mixdown. Equivalent to `--mixdown same_as_source` | `--no_mixdown` |
 | `--no_mt` | Disable [row based multithreading](https://trac.ffmpeg.org/wiki/Encode/VP9#rowmt) | `--no_mt` |
 | `-o` / `--output` | Output file name (If not specified, output is named after the input prepended with "`_1_`") | `-o out.webm` |
+| `--pix_fmt` | [Pixel format](https://gist.github.com/dericed/3319386) passed directly as the `-pix_fmt` arg to ffmpeg. By default it's [yuv420p](https://video.stackexchange.com/questions/39238/ffmpeg-when-should-one-use-pix-fmt-yuv420p-in-combination-with-filter-complex) for maximum compatibility. Use `same_as_source` to omit the arg from ffmpeg entirely, which will cause it to inherit the format of the source video implicitly. | `--pix_fmt same_as_source` |
 | `-r` / `--resolution` | Manual resolution override. Applied as the maximum dimension both horizontal and vertical. If not specified, the resolution is automatically determined based on target bitrate. | `-r 1280` |
 | `--resize_mode` | How to calculate target resolution. `table` = use time-based lookup table. May be `cubic`, `logarithmic`, or `table`. Default is `logarithmic`. | `--resize_mode table` |
 | `-s` / `--start` | Absolute start timestamp. 0:00 if not specified. | `--start 3:45` |

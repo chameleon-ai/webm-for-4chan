@@ -1082,7 +1082,7 @@ def gif_caption(input_filename : str, args):
     return output_filename  
 
 # The part where the webm is encoded
-def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mixdown : MixdownMode, mode : BoardMode, bframes : int, group_of_pictures: float, dry_run : bool):
+def encode_video(input, output, start, duration, video_codec : list, video_filters : list, audio_codec : list, audio_filters : list, subtitles, track, full_video : bool, no_audio : bool, mixdown : MixdownMode, mode : BoardMode, bframes : int, group_of_pictures: float, pix_fmt: str, dry_run : bool):
     ffmpeg_args = [ffmpeg_exe, '-hide_banner']
     slice_args = ['-ss', str(start), "-t", str(duration)] # The arguments needed for slicing a clip
     vf_args = '' # The video filter arguments
@@ -1119,6 +1119,9 @@ def encode_video(input, output, start, duration, video_codec : list, video_filte
 
     if bframes != 0: # Add B-frames argument (default is 0 so it can be skipped if 0)
         ffmpeg_args.extend(["-bf", str(bframes)])
+    
+    if pix_fmt != "same_as_source":
+        ffmpeg_args.extend(["-pix_fmt", pix_fmt])
 
     # The constructed ffmpeg commands
     pass1 = ffmpeg_args
@@ -1499,7 +1502,7 @@ def process_video(input_filename, start, duration, args, full_video):
         print(f'Carbon Copy: {carbon_copy_output}')
 
     # The main part where the video is rendered
-    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.mixdown, args.board, args.bframes, args.group_of_pictures, args.dry_run)
+    encode_video(input_filename, output, start, duration, video_codec, video_filters, audio_codec, audio_filters, subs, audio_track, full_video, no_audio, args.mixdown, args.board, args.bframes, args.group_of_pictures, args.pix_fmt, args.dry_run)
 
     if os.path.isfile(output):
         out_size = os.path.getsize(output)
@@ -1874,6 +1877,7 @@ if __name__ == '__main__':
         parser.add_argument('--no_resize', action='store_true', help='Disable resolution resizing (may cause file size overshoot)')
         parser.add_argument('--no_mixdown', action='store_true', help='Disable automatic audio mixdown. Equivalent to --mixdown same_as_source.')
         parser.add_argument('--no_mt', action='store_true', help='Disable row based multithreading (the "-row-mt 1" switch)')
+        parser.add_argument('--pix_fmt', type=str, default='yuv420p', help='Pixel format (defaults to 8-bit yuv420). Specify "same_as_souce" to omit the pix_fmt arg from ffmpeg.')
         parser.add_argument('--resize_mode', type=ResizeMode, default='logarithmic', choices=list(ResizeMode), help='How to calculate target resolution. table = use time-based lookup table. Default is logarithmic.')
         parser.add_argument('--size', '--limit', dest='size', type=float, help='Target file size limit, in MiB. Default is 6 if board is wsg, and 4 otherwise.')
         parser.add_argument('--static_image', action='store_true', help="Treat video as a static image and use image+audio combine mode.")
