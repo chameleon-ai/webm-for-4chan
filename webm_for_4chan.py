@@ -136,7 +136,7 @@ def format_timedelta(ts : datetime.timedelta):
     return ts_str
 
 def is_url(arg : str) -> bool:
-    return re.match(r'(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)', arg) is not None
+    return re.match(r'^(?:https?://)?(?:www\.)?[-A-Za-z0-9@:%._\+~#=]{1,256}\.[A-Za-z]{2,63}\b(?:[-A-Za-z0-9@:%_\+.~#?&//=]*)$', arg) is not None
 
 def download_video(url : str, args) -> str:
     print(f'Attempting to download {url}')
