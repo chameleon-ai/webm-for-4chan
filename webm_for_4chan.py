@@ -1052,10 +1052,18 @@ def get_output_filename(input_filename, args, suffix = None):
     if suffix is None:
         suffix = '.webm' if (args.codec == 'libvpx-vp9' or args.codec == 'vp9_vaapi') else '.mp4'
     if args.output is not None:
-        output = args.output
-        # Force webm suffix
-        if os.path.splitext(output)[-1] != suffix:
-            output += suffix
+        from pathlib import Path
+        input_path = Path(input_filename)
+        out = Path(os.path.expandvars(os.path.expanduser(args.output)))
+        # If user gave a directory (explicitly existing dir or path ending with sep),
+        # treat as directory and compose filename from input stem.
+        if out.exists() and out.is_dir():
+            out = out / (input_path.stem + suffix)
+        # Normalize and ensure suffix
+        out = out.expanduser()
+        out = (out if out.suffix.lower() == suffix.lower() else out.with_suffix(suffix))
+        output = os.fspath(out)
+        
         if os.path.isfile(output):
             confirmation = ''
             while not (confirmation.lower() == 'y' or confirmation.lower() == 'n'):

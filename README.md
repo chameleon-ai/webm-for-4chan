@@ -86,7 +86,7 @@ python webm_for_4chan.py https://www.youtube.com/watch?v=dQw4w9WgXcQ
 ```
 
 The output will be the name of the input prepended with `_1_`, i.e. `_1_input.webm` or `_2_`, `_3_` etc. if the file already exists.\
-Use `-o`/`--output` to specify a custom file name.
+Use `-o`/`--output` to specify a custom file name or directory. If `-o` is a directory, it will name the file after the input.
 
 ### Command Line Arguments Reference
 
@@ -134,7 +134,7 @@ Use `-o`/`--output` to specify a custom file name.
 | `--no_resize` | Do not resize the output. | `--no_resize` |
 | `--no_mixdown` | Disable automatic audio mixdown. Equivalent to `--mixdown same_as_source` | `--no_mixdown` |
 | `--no_mt` | Disable [row based multithreading](https://trac.ffmpeg.org/wiki/Encode/VP9#rowmt) | `--no_mt` |
-| `-o` / `--output` | Output file name (If not specified, output is named after the input prepended with "`_1_`") | `-o out.webm` |
+| `-o` / `--output` | Output file name or directory (If not specified, output is named after the input prepended with "`_1_`") | `-o out.webm` |
 | `--pix_fmt` | [Pixel format](https://gist.github.com/dericed/3319386) passed directly as the `-pix_fmt` arg to ffmpeg. By default it's [yuv420p](https://video.stackexchange.com/questions/39238/ffmpeg-when-should-one-use-pix-fmt-yuv420p-in-combination-with-filter-complex) for maximum compatibility. Use `same_as_source` to omit the arg from ffmpeg entirely, which will cause it to inherit the format of the source video implicitly. | `--pix_fmt same_as_source` |
 | `-r` / `--resolution` | Manual resolution override. Applied as the maximum dimension both horizontal and vertical. If not specified, the resolution is automatically determined based on target bitrate. | `-r 1280` |
 | `--resize_mode` | How to calculate target resolution. `table` = use time-based lookup table. May be `cubic`, `logarithmic`, or `table`. Default is `logarithmic`. | `--resize_mode table` |
