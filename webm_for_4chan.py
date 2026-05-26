@@ -1492,6 +1492,9 @@ def process_video(input_filename, start, duration, args, full_video):
     elif args.codec == 'libx264':
         video_codec = ["-c:v", "libx264", "-preset", 'fast' if args.fast else 'slower']
         files_to_clean.append('ffmpeg2pass-0.log.mbtree') # This is the pass 1 file for h264
+    elif args.codec == 'h264_nvenc':
+        video_codec = ["-c:v", "h264_nvenc", "-preset", 'p4' if args.fast else 'p7']
+        files_to_clean.append('ffmpeg2pass-0.log.mbtree') # This is the pass 1 file for h264
     elif args.codec == 'vp9_vaapi':
         video_codec = ["-vaapi_device", "/dev/dri/renderD128", "-c:v", "vp9_vaapi", "-bsf:v", "vp9_raw_reorder,vp9_superframe"]
         video_filters.extend(['format=nv12','hwupload'])
@@ -1884,7 +1887,7 @@ if __name__ == '__main__':
         parser.add_argument('--bypass_resolution_table', action='store_true', help='Do not snap to the nearest standard resolution and use raw calculated instead.')
         parser.add_argument('--caption', type=str, help='Caption text to add. Caption is rendered on top with a white background in "gif caption" meme format.')
         parser.add_argument('--cc', action='store_true', help='Create a lossless Carbon Copy as h264+opus mkv.')
-        parser.add_argument('--codec', type=str, default='libvpx-vp9', choices=['libvpx-vp9','libx264', 'vp9_vaapi'], help='Video codec to use. Default is libvpx-vp9.')
+        parser.add_argument('--codec', type=str, default='libvpx-vp9', choices=['libvpx-vp9','libx264', 'vp9_vaapi', 'h264_nvenc'], help='Video codec to use. Default is libvpx-vp9.')
         parser.add_argument('--crop', type=str, help="Crop the video. This string is passed directly to ffmpeg's 'crop' filter. See ffmpeg documentation for details.")
         parser.add_argument('--deadline', type=str, default='good', choices=['good', 'best', 'realtime'], help='The -deadline argument passed to ffmpeg. Default is "good". "best" is higher quality but slower. See libvpx-vp9 documentation for details.')
         parser.add_argument('--download', type=str, help="Download the video using yt-dlp.")
