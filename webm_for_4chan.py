@@ -1066,6 +1066,9 @@ def get_output_filename(input_filename, args, suffix = None):
         
         if os.path.isfile(output):
             confirmation = ''
+            if args.yes:
+                print(f"File '{output}' already exists, overwriting.")
+                confirmation = 'y'
             while not (confirmation.lower() == 'y' or confirmation.lower() == 'n'):
                 confirmation = input("File '{}' already exists, overwrite? Y/N ".format(output))
             if confirmation.lower() == 'y':
@@ -1868,6 +1871,7 @@ if __name__ == '__main__':
         parser.add_argument('-x', '--cut', type=str, help='Segments to cut (opposite of concatenate), separated by ";", i.e. "5:00-5:15;5:45-5:52.4"')
         parser.add_argument('-k', '--keep_temp_files', action='store_true', help="Keep temporary files generated during size calculation etc.")
         parser.add_argument('-g', '--group_of_pictures', type=float, help="Set ffmpeg's group-of-pictures interval (-g) directly.")
+        parser.add_argument('-y', '--yes', action='store_true', help="Automatically overwrite a file if it already exists.")
         parser.add_argument('--audio_index', type=int, help="Audio track index to select (use --list_audio if you don't know the index)")
         parser.add_argument('--audio_lang', type=str, help="Select audio track by language, must be an exact match with what is listed in the file (use --list_audio if you don't know the language)")
         parser.add_argument('--audio_rate', type=int, choices=audio_bitrate_table, help='Manual audio bit-rate override (kbps)')

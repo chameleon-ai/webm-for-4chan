@@ -149,6 +149,7 @@ Use `-o`/`--output` to specify a custom file name or directory. If `-o` is a dir
 | `--use_fallback` | yt-dlp sometimes falls back to an inferior video type (a 480p mp4 instead of the preferred 1080p webm for example). In this case, the downloaded video will have the same name except for the file extension. By default, the script will fail because the preferred file was not downloaded. Enabling this option allows webm-for-4chan to automatically proceed with encoding this file. | `--use_fallback` |
 | `-v` / `--video_filter` | [Video filter](https://ffmpeg.org/ffmpeg-filters.html#Video-Filters) arguments. This string is passed directly to ffmpeg's -vf chain. | `-v "spp"` |
 | `-x` / `--cut` | Segments to cut (opposite of concatenate) | `-x "2:00-3:00"`
+| `-y` / `--yes` | Confirms "Y" on duplicate output name detection, overwriting the file. This only matters when manually specifying `-o` as auto outputs are automatically deconflicted. | `-y` |
 
 
 ### Music Webms
