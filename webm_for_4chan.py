@@ -195,6 +195,25 @@ def download_video(url : str, args) -> str:
                 print('\r' + line.strip(), end='')
             else:
                 print(line, end='')
+        # Sometimes yt-dlp's actual download can mismatch the initial query
+        if not os.path.isfile(result_filename):
+            video_exts = ['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mpeg', '.mpg', '.m4v']
+            base, _ = os.path.splitext(os.path.basename(result_filename))
+            found = None
+            for fname in os.listdir(os.getcwd()):
+                fbase, fext = os.path.splitext(fname)
+                if fbase == base and fext.lower() in video_exts:
+                    found = os.path.join(os.getcwd(), fname)
+                    break
+            if found:
+                if args.use_fallback:
+                    result_filename = found
+                else:
+                    raise FileNotFoundError(f'File "{result_filename}" not found, but similar file with extension "{os.path.splitext(os.path.basename(found))[-1]}" exists.'\
+                                            '\nThis is likely due to yt-dlp falling back to an alternate video type from the initial query.'\
+                                            '\nIf this persists, consider adjusting your yt-dlp settings, as you may be failing JS challenges or getting denied the highest available quality options.'\
+                                            '\nThe file has already been downloaded, so you may rerun webm-for-4chan by specifying the local file name instead of the url.'\
+                                            "\nIf you wish to avoid this error in the future and proceed with the similar file name automatically, specify the '--use_fallback' option.")
     return result_filename
 
 # Determines if the argument is a parsable timestamp
@@ -1886,6 +1905,7 @@ if __name__ == '__main__':
         parser.add_argument('--sub_lang', type=str, help="Subtitle language to burn-in, must be an exact match with what is listed in the file (use --list_subs if you don't know the language)")
         parser.add_argument('--sub_file', type=str, help='Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs)')
         parser.add_argument('--trim_silence', type=SilenceTrimMode, choices=list(SilenceTrimMode), help="Skip silence using a first pass with silencedetect filter. Skip silence at the start, end, or cut all detected silence.")
+        parser.add_argument('--use_fallback', action='store_true', help='When downloading from URL, automatically use similar video file names')
         args, unknown_args = parser.parse_known_args()
         if help in args:
             parser.print_help()

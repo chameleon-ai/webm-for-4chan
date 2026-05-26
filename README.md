@@ -146,6 +146,7 @@ Use `-o`/`--output` to specify a custom file name.
 | `--sub_lang` | Subtitle language to burn-in, must be an exact match with what is listed in the file (use `--list_subs` if you don't know the language). Note subtitle language is often mislabeled, so this is less reliable than using the index.  | `--sub_lang en` |
 | `--sub_file` | Filename of subtitles to burn-in (use --sub_index or --sub_lang for embedded subs) | `--sub_file subs.ass` |
 | `--trim_silence` | Skip silence using a first pass with [silencedetect](https://ffmpeg.org/ffmpeg-filters.html#silencedetect) filter. Skip silence at the start, end, or cut all detected silence. May be `start`, `end`, `start_and_end`, or `all` | `--trim_silence all` |
+| `--use_fallback` | yt-dlp sometimes falls back to an inferior video type (a 480p mp4 instead of the preferred 1080p webm for example). In this case, the downloaded video will have the same name except for the file extension. By default, the script will fail because the preferred file was not downloaded. Enabling this option allows webm-for-4chan to automatically proceed with encoding this file. | `--use_fallback` |
 | `-v` / `--video_filter` | [Video filter](https://ffmpeg.org/ffmpeg-filters.html#Video-Filters) arguments. This string is passed directly to ffmpeg's -vf chain. | `-v "spp"` |
 | `-x` / `--cut` | Segments to cut (opposite of concatenate) | `-x "2:00-3:00"`
 
