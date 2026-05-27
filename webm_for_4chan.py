@@ -1926,7 +1926,7 @@ if __name__ == '__main__':
             parser.print_help()
         if args.keep_temp_files:
             do_cleanup = False
-        if args.mp4: # Use this shortcut flag to override the --codec option
+        if args.mp4 and args.codec != 'h264_nvenc': # Use this shortcut flag to override the --codec option
             args.codec = 'libx264'
         if args.stereo: # Determine aliases for mixdown mode
             args.mixdown = MixdownMode.stereo
